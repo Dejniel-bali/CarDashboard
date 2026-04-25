@@ -1,54 +1,58 @@
 ﻿using System;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace CarSimulator
 {
     class Program
     {
-        static void Main(string[] args)
+        // Metoda Main je nyní asynchronní, aby mohla čekat na odpověď serveru
+        static async Task Main(string[] args)
         {
             Car car = new Car();
             Random rnd = new Random();
             int tickCount = 0;
 
+            // 1. PŘÍPRAVA PRO KOMUNIKACI SE SERVEREM
+            using HttpClient client = new HttpClient();
+            // TOTO JE DŮLEŽITÉ: Zde musí být adresa tvého budoucího serveru (API). 
+            // Nyní je tam nastavena lokální testovací adresa.
+            string serverUrl = "http://localhost:5000/api/telemetry";
+
             Console.CursorVisible = false;
             Console.Clear();
-            Console.WriteLine("=== SIMULACE JÍZDY AUTA ===");
+            Console.WriteLine("=== SIMULACE JÍZDY AUTA A ODESÍLÁNÍ NA SERVER ===");
             Console.WriteLine("(Stiskněte CTRL+C pro ukončení)\n");
 
-            // Hlavní smyčka programu běží, dokud nedojde palivo
             while (car.Fuel > 0)
             {
-                // Každých 10 sekund se auto rozhodne, co bude dělat dál
+                // Náhodné události
                 if (tickCount % 10 == 0)
                 {
                     int randomEvent = rnd.Next(100);
-
-                    if (randomEvent < 15)
-                        car.TargetSpeed = 0;   // 15% šance na zastavení (křižovatka, překážka)
-                    else if (randomEvent < 45)
-                        car.TargetSpeed = 50;  // 30% šance na jízdu ve městě
-                    else if (randomEvent < 75)
-                        car.TargetSpeed = 90;  // 30% šance na okresku
-                    else
-                        car.TargetSpeed = 130; // 25% šance na dálnici
+                    if (randomEvent < 15) car.TargetSpeed = 0;
+                    else if (randomEvent < 45) car.TargetSpeed = 50;
+                    else if (randomEvent < 75) car.TargetSpeed = 90;
+                    else car.TargetSpeed = 130;
                 }
 
-                // Aktualizace fyziky auta (simulujeme posun o 1 sekundu)
+                // Aktualizace fyziky
                 car.Update(1.0);
 
-                // Vykreslení Dashboardu na stejné místo v konzoli (aby text neposkakoval)
+                // Vykreslení do konzole
                 Console.SetCursorPosition(0, 3);
                 Console.WriteLine($"Cílová rychlost:   {car.TargetSpeed,5} km/h   ");
                 Console.WriteLine($"Aktuální rychlost: {Math.Round(car.CurrentSpeed),5} km/h   ");
                 Console.WriteLine($"Ujetá vzdálenost:  {car.Distance,8:F2} km    ");
                 Console.WriteLine($"Zbývající palivo:  {car.Fuel,8:F2} l     ");
 
-                // Výpočet průměrné spotřeby (pokud už jsme něco ujeli)
+                double avgConsumption = 0;
                 if (car.Distance > 0.1)
                 {
-                    double usedFuel = 50.0 - car.Fuel; // Výchozí nádrž je 50 litrů
-                    double avgConsumption = (usedFuel / car.Distance) * 100.0;
+                    avgConsumption = ((50.0 - car.Fuel) / car.Distance) * 100.0;
                     Console.WriteLine($"Průměrná spotřeba: {avgConsumption,8:F2} l/100km   ");
                 }
                 else
@@ -56,7 +60,44 @@ namespace CarSimulator
                     Console.WriteLine($"Průměrná spotřeba:   Počítám...         ");
                 }
 
-                // Počkáme 1 reálnou vteřinu (1000 ms)
+                // --- 2. ODESLÁNÍ DAT NA SERVER ---
+                // Data neposíláme každou vteřinu, abychom nezahltili server, ale třeba každé 2 vteřiny
+                if (tickCount % 2 == 0)
+                {
+                    // Vytvoříme anonymní objekt s daty, která chceme poslat
+                    var telemetryData = new
+                    {
+                        Timestamp = DateTime.UtcNow,
+                        CurrentSpeed = Math.Round(car.CurrentSpeed, 2),
+                        TargetSpeed = car.TargetSpeed,
+                        Distance = Math.Round(car.Distance, 2),
+                        FuelRemaining = Math.Round(car.Fuel, 2),
+                        AverageConsumption = Math.Round(avgConsumption, 2)
+                    };
+
+                    try
+                    {
+                        // Převedeme objekt na JSON text
+                        string jsonString = JsonSerializer.Serialize(telemetryData);
+                        var content = new StringContent(jsonString, Encoding.UTF8, "application/json");
+
+                        // Odešleme na server metodou POST
+                        HttpResponseMessage response = await client.PostAsync(serverUrl, content);
+
+                        Console.SetCursorPosition(0, 10);
+                        if (response.IsSuccessStatusCode)
+                            Console.WriteLine($"[Server]: Odesláno OK (Status {response.StatusCode})       ");
+                        else
+                            Console.WriteLine($"[Server]: Chyba API (Status {response.StatusCode})         ");
+                    }
+                    catch (Exception)
+                    {
+                        Console.SetCursorPosition(0, 10);
+                        // Pokud server neexistuje nebo neběží, vyhodí to výjimku, zachytíme ji
+                        Console.WriteLine($"[Server]: Nedostupný. Zkontroluj URL '{serverUrl}'           ");
+                    }
+                }
+
                 Thread.Sleep(1000);
                 tickCount++;
             }
@@ -67,21 +108,21 @@ namespace CarSimulator
 
     class Car
     {
+        // Třída Car zůstává úplně stejná jako v předchozím kroku
         public double CurrentSpeed { get; private set; } = 0;
         public double TargetSpeed { get; set; } = 0;
         public double Distance { get; private set; } = 0;
-        public double Fuel { get; private set; } = 50.0; // Kapacita nádrže v litrech
+        public double Fuel { get; private set; } = 50.0;
 
         public void Update(double deltaTimeSeconds)
         {
-            // --- 1. REALISTICKÉ ZRYCHLOVÁNÍ A BRZDĚNÍ ---
-            double accelerationRate = 12.0; // Auto zrychlí o 12 km/h za sekundu
-            double brakingRate = 20.0;      // Brzdy jsou silnější než motor (20 km/h za sekundu)
+            double accelerationRate = 12.0;
+            double brakingRate = 20.0;
 
             if (CurrentSpeed < TargetSpeed)
             {
                 CurrentSpeed += accelerationRate * deltaTimeSeconds;
-                if (CurrentSpeed > TargetSpeed) CurrentSpeed = TargetSpeed; // Nepřekračovat cíl
+                if (CurrentSpeed > TargetSpeed) CurrentSpeed = TargetSpeed;
             }
             else if (CurrentSpeed > TargetSpeed)
             {
@@ -89,29 +130,19 @@ namespace CarSimulator
                 if (CurrentSpeed < TargetSpeed) CurrentSpeed = TargetSpeed;
             }
 
-            // --- 2. VÝPOČET VZDÁLENOSTI ---
-            // Rychlost je v km/h, musíme ji převést na ujeté km za daný časový úsek (sekundy)
             double distanceThisTick = (CurrentSpeed / 3600.0) * deltaTimeSeconds;
             Distance += distanceThisTick;
 
-            // --- 3. VÝPOČET SPOTŘEBY PALIVA ---
-            // A) Spotřeba na volnoběh (např. když auto stojí s nastartovaným motorem)
-            double idleConsumption = (0.8 / 3600.0) * deltaTimeSeconds; // cca 0.8 litru za hodinu
-
-            // B) Spotřeba vlivem aerodynamického odporu (roste s druhou mocninou rychlosti)
-            // Koeficient 0.0000002 je nastaven tak, aby při 130 km/h byla reálná spotřeba vyšší
+            double idleConsumption = (0.8 / 3600.0) * deltaTimeSeconds;
             double speedConsumption = (CurrentSpeed * CurrentSpeed * 0.0000002) * deltaTimeSeconds;
-
-            // C) Extra spotřeba paliva při akceleraci (motor se víc namáhá)
             double accelerationConsumption = 0;
+
             if (CurrentSpeed < TargetSpeed)
             {
                 accelerationConsumption = (0.001) * deltaTimeSeconds;
             }
 
-            // Odečteme celkovou spotřebu za tuto vteřinu z nádrže
             Fuel -= (idleConsumption + speedConsumption + accelerationConsumption);
-
             if (Fuel < 0) Fuel = 0;
         }
     }

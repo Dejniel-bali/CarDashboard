@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="CarSimulator/CarSimulator.csproj" />
+  <Project Path="TelemetryServer/TelemetryServer.csproj" />
 </Solution>
