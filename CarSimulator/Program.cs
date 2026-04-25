@@ -20,7 +20,7 @@ namespace CarSimulator
             using HttpClient client = new HttpClient();
             // TOTO JE DŮLEŽITÉ: Zde musí být adresa tvého budoucího serveru (API). 
             // Nyní je tam nastavena lokální testovací adresa.
-            string serverUrl = "http://localhost:5000/api/telemetry";
+            string serverUrl = "https://localhost:7285/api/telemetry";
 
             Console.CursorVisible = false;
             Console.Clear();
