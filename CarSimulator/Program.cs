@@ -9,141 +9,180 @@ namespace CarSimulator
 {
     class Program
     {
-        // Metoda Main je nyní asynchronní, aby mohla čekat na odpověď serveru
         static async Task Main(string[] args)
         {
             Car car = new Car();
             Random rnd = new Random();
             int tickCount = 0;
-
-            // 1. PŘÍPRAVA PRO KOMUNIKACI SE SERVEREM
+            int exitTimer = 0;
             using HttpClient client = new HttpClient();
-            // TOTO JE DŮLEŽITÉ: Zde musí být adresa tvého budoucího serveru (API). 
-            // Nyní je tam nastavena lokální testovací adresa.
+
+            // Port uprav podle svého (např. 7285)
             string serverUrl = "https://localhost:7285/api/telemetry";
 
             Console.CursorVisible = false;
             Console.Clear();
-            Console.WriteLine("=== SIMULACE JÍZDY AUTA A ODESÍLÁNÍ NA SERVER ===");
-            Console.WriteLine("(Stiskněte CTRL+C pro ukončení)\n");
 
-            while (car.Fuel > 0)
+            while (car.Fuel > 0 || car.IsPitStop)
             {
-                // Náhodné události
-                if (tickCount % 10 == 0)
+                // --- LOGIKA BEZPEČNOSTI ---
+                bool isCritical = car.OilLevel < 5.0 || car.CoolantLevel < 5.0 || car.TirePressure < 1.8 || car.Fuel < 2.0;
+                bool isWarning = car.OilLevel < 20.0 || car.CoolantLevel < 20.0 || car.TirePressure < 2.0 || car.Fuel < 10.0;
+
+                if (isCritical && !car.IsPitStop)
                 {
-                    int randomEvent = rnd.Next(100);
-                    if (randomEvent < 15) car.TargetSpeed = 0;
-                    else if (randomEvent < 45) car.TargetSpeed = 50;
-                    else if (randomEvent < 75) car.TargetSpeed = 90;
-                    else car.TargetSpeed = 130;
+                    if (car.CurrentSpeed > 95 && !car.IsEmergencyExiting)
+                    {
+                        car.IsEmergencyExiting = true;
+                        car.TargetSpeed = 90;
+                        exitTimer = 5;
+                    }
+                    else if (car.IsEmergencyExiting)
+                    {
+                        if (car.CurrentSpeed <= 91)
+                        {
+                            if (exitTimer > 0) exitTimer--;
+                            else { car.IsEmergencyExiting = false; car.IsPitStop = true; car.TargetSpeed = 0; }
+                        }
+                    }
+                    else if (!car.IsEmergencyExiting)
+                    {
+                        car.IsPitStop = true;
+                        car.TargetSpeed = 0;
+                    }
                 }
 
-                // Aktualizace fyziky
+                // --- LOGIKA JÍZDY ---
+                if (!car.IsPitStop && !car.IsEmergencyExiting)
+                {
+                    if (tickCount % 10 == 0)
+                    {
+                        int randomEvent = rnd.Next(100);
+                        if (car.TargetSpeed == 0) car.TargetSpeed = 50;
+                        else if (car.TargetSpeed == 130) car.TargetSpeed = randomEvent < 30 ? 90 : 130;
+                        else car.TargetSpeed = rnd.Next(3) == 0 ? 50 : (rnd.Next(2) == 0 ? 90 : 130);
+                    }
+                }
+
                 car.Update(1.0);
 
-                // Vykreslení do konzole
-                Console.SetCursorPosition(0, 3);
-                Console.WriteLine($"Cílová rychlost:   {car.TargetSpeed,5} km/h   ");
-                Console.WriteLine($"Aktuální rychlost: {Math.Round(car.CurrentSpeed),5} km/h   ");
-                Console.WriteLine($"Ujetá vzdálenost:  {car.Distance,8:F2} km    ");
-                Console.WriteLine($"Zbývající palivo:  {car.Fuel,8:F2} l     ");
+                // --- PŘEHLEDNÝ VÝPIS DO CMD ---
+                VypisDashboard(car, isWarning, isCritical);
 
-                double avgConsumption = 0;
-                if (car.Distance > 0.1)
-                {
-                    avgConsumption = ((50.0 - car.Fuel) / car.Distance) * 100.0;
-                    Console.WriteLine($"Průměrná spotřeba: {avgConsumption,8:F2} l/100km   ");
-                }
-                else
-                {
-                    Console.WriteLine($"Průměrná spotřeba:   Počítám...         ");
-                }
-
-                // --- 2. ODESLÁNÍ DAT NA SERVER ---
-                // Data neposíláme každou vteřinu, abychom nezahltili server, ale třeba každé 2 vteřiny
-                if (tickCount % 2 == 0)
-                {
-                    // Vytvoříme anonymní objekt s daty, která chceme poslat
-                    var telemetryData = new
-                    {
-                        Timestamp = DateTime.UtcNow,
-                        CurrentSpeed = Math.Round(car.CurrentSpeed, 2),
-                        TargetSpeed = car.TargetSpeed,
-                        Distance = Math.Round(car.Distance, 2),
-                        FuelRemaining = Math.Round(car.Fuel, 2),
-                        AverageConsumption = Math.Round(avgConsumption, 2)
-                    };
-
-                    try
-                    {
-                        // Převedeme objekt na JSON text
-                        string jsonString = JsonSerializer.Serialize(telemetryData);
-                        var content = new StringContent(jsonString, Encoding.UTF8, "application/json");
-
-                        // Odešleme na server metodou POST
-                        HttpResponseMessage response = await client.PostAsync(serverUrl, content);
-
-                        Console.SetCursorPosition(0, 10);
-                        if (response.IsSuccessStatusCode)
-                            Console.WriteLine($"[Server]: Odesláno OK (Status {response.StatusCode})       ");
-                        else
-                            Console.WriteLine($"[Server]: Chyba API (Status {response.StatusCode})         ");
-                    }
-                    catch (Exception)
-                    {
-                        Console.SetCursorPosition(0, 10);
-                        // Pokud server neexistuje nebo neběží, vyhodí to výjimku, zachytíme ji
-                        Console.WriteLine($"[Server]: Nedostupný. Zkontroluj URL '{serverUrl}'           ");
-                    }
-                }
+                // Odesílání na server
+                await OdesliData(client, serverUrl, car);
 
                 Thread.Sleep(1000);
                 tickCount++;
             }
+        }
 
-            Console.WriteLine("\nDOŠLO PALIVO! Auto zastavilo. Konec simulace.");
+        static void VypisDashboard(Car car, bool warning, bool critical)
+        {
+            Console.SetCursorPosition(0, 0);
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("====================================================");
+            Console.WriteLine("             DIGITÁLNÍ PALUBNÍ POČÍTAČ              ");
+            Console.WriteLine("====================================================");
+            Console.ResetColor();
+
+            // Status řádek
+            Console.Write(" STAV SYSTÉMU: ");
+            if (car.IsPitStop) { Console.ForegroundColor = ConsoleColor.Red; Console.WriteLine("[!] SERVISNÍ ZASTÁVKA       "); }
+            else if (car.IsEmergencyExiting) { Console.ForegroundColor = ConsoleColor.DarkYellow; Console.WriteLine("[?] OPOUŠTĚNÍ DÁLNICE...    "); }
+            else if (critical) { Console.ForegroundColor = ConsoleColor.Red; Console.WriteLine("[!!!] KRITICKÁ PORUCHA      "); }
+            else if (warning) { Console.ForegroundColor = ConsoleColor.Yellow; Console.WriteLine("[!] VAROVÁNÍ: NÍZKÉ HLADINY "); }
+            else { Console.ForegroundColor = ConsoleColor.Green; Console.WriteLine("[OK] PROVOZ NORMÁLNÍ        "); }
+            Console.ResetColor();
+
+            Console.WriteLine("----------------------------------------------------");
+
+            // Jízda
+            Console.WriteLine($" Aktuální rychlost:  {Math.Round(car.CurrentSpeed),3} km/h  ");
+            Console.WriteLine($" Požadovaná rychlost:{car.TargetSpeed,3} km/h  ");
+            Console.WriteLine($" Ujetá vzdálenost:   {car.Distance,6:F2} km    ");
+
+            Console.WriteLine("----------------------------------------------------");
+
+            // Kapaliny a pneu
+            VypisHodnotu("Palivo", car.Fuel, "l", 10, 2);
+            VypisHodnotu("Olej", car.OilLevel, "%", 20, 5);
+            VypisHodnotu("Chlazení", car.CoolantLevel, "%", 20, 5);
+            VypisHodnotu("Tlak pneu", car.TirePressure, "bar", 2.0, 1.8);
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("====================================================");
+            Console.ResetColor();
+        }
+
+        static void VypisHodnotu(string label, double hodnota, string jednotka, double limitWarning, double limitDanger)
+        {
+            Console.Write($" {label,-12}: {hodnota,6:F2} {jednotka,-4} ");
+            if (hodnota < limitDanger) { Console.ForegroundColor = ConsoleColor.Red; Console.Write("[KRITICKÉ]"); }
+            else if (hodnota < limitWarning) { Console.ForegroundColor = ConsoleColor.Yellow; Console.Write("[NÍZKÉ]"); }
+            else { Console.ForegroundColor = ConsoleColor.Green; Console.Write("[V POŘÁDKU]"); }
+            Console.WriteLine("    "); // Pročištění zbytků textu
+            Console.ResetColor();
+        }
+
+        static async Task OdesliData(HttpClient client, string url, Car car)
+        {
+            try
+            {
+                var avg = car.Distance > 0.1 ? Math.Round(((50.0 - car.Fuel) / car.Distance) * 100.0, 2) : 0;
+                var data = new
+                {
+                    Timestamp = DateTime.UtcNow,
+                    CurrentSpeed = Math.Round(car.CurrentSpeed, 2),
+                    TargetSpeed = car.TargetSpeed,
+                    Distance = Math.Round(car.Distance, 2),
+                    FuelRemaining = Math.Round(car.Fuel, 2),
+                    AverageConsumption = avg,
+                    OilLevel = Math.Round(car.OilLevel, 2),
+                    CoolantLevel = Math.Round(car.CoolantLevel, 2),
+                    TirePressure = Math.Round(car.TirePressure, 2)
+                };
+                await client.PostAsync(url, new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json"));
+            }
+            catch { /* Server offline - simulace běží dál */ }
         }
     }
 
     class Car
     {
-        // Třída Car zůstává úplně stejná jako v předchozím kroku
-        public double CurrentSpeed { get; private set; } = 0;
+        public double CurrentSpeed { get; set; } = 0;
         public double TargetSpeed { get; set; } = 0;
-        public double Distance { get; private set; } = 0;
-        public double Fuel { get; private set; } = 50.0;
+        public double Distance { get; set; } = 0;
+        public double Fuel { get; set; } = 50.0;
+        public double OilLevel { get; set; } = 28.0;
+        public double CoolantLevel { get; set; } = 25.0;
+        public double TirePressure { get; set; } = 2.3;
+        public bool IsPitStop { get; set; } = false;
+        public bool IsEmergencyExiting { get; set; } = false;
 
-        public void Update(double deltaTimeSeconds)
+        public void Update(double dt)
         {
-            double accelerationRate = 12.0;
-            double brakingRate = 20.0;
+            double power = IsEmergencyExiting ? 5.0 : 20.0;
 
-            if (CurrentSpeed < TargetSpeed)
+            if (CurrentSpeed < TargetSpeed) CurrentSpeed = Math.Min(TargetSpeed, CurrentSpeed + 12.0 * dt);
+            else if (CurrentSpeed > TargetSpeed) CurrentSpeed = Math.Max(TargetSpeed, CurrentSpeed - power * dt);
+
+            Distance += (CurrentSpeed / 3600.0) * dt;
+
+            if (IsPitStop && CurrentSpeed < 0.1)
             {
-                CurrentSpeed += accelerationRate * deltaTimeSeconds;
-                if (CurrentSpeed > TargetSpeed) CurrentSpeed = TargetSpeed;
+                Fuel += 15 * dt; OilLevel += 25 * dt; CoolantLevel += 25 * dt; TirePressure += 0.3 * dt;
+                if (Fuel >= 50 && OilLevel >= 100 && CoolantLevel >= 100 && TirePressure >= 2.5)
+                {
+                    Fuel = 50; OilLevel = 100; CoolantLevel = 100; TirePressure = 2.5;
+                    IsPitStop = false; TargetSpeed = 50;
+                }
             }
-            else if (CurrentSpeed > TargetSpeed)
+            else
             {
-                CurrentSpeed -= brakingRate * deltaTimeSeconds;
-                if (CurrentSpeed < TargetSpeed) CurrentSpeed = TargetSpeed;
+                Fuel -= (0.001 + (CurrentSpeed * CurrentSpeed * 0.0000003)) * dt;
+                OilLevel -= 0.12 * dt; CoolantLevel -= 0.14 * dt; TirePressure -= 0.004 * dt;
             }
-
-            double distanceThisTick = (CurrentSpeed / 3600.0) * deltaTimeSeconds;
-            Distance += distanceThisTick;
-
-            double idleConsumption = (0.8 / 3600.0) * deltaTimeSeconds;
-            double speedConsumption = (CurrentSpeed * CurrentSpeed * 0.0000002) * deltaTimeSeconds;
-            double accelerationConsumption = 0;
-
-            if (CurrentSpeed < TargetSpeed)
-            {
-                accelerationConsumption = (0.001) * deltaTimeSeconds;
-            }
-
-            Fuel -= (idleConsumption + speedConsumption + accelerationConsumption);
-            if (Fuel < 0) Fuel = 0;
         }
     }
 }

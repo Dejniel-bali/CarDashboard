@@ -3,65 +3,73 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Threading.Tasks;
+using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Zaregistrování databázového kontextu do aplikace
 builder.Services.AddDbContext<AppDbContext>();
 
 var app = builder.Build();
 
-// 2. Automatické vytvoření databáze při spuštění serveru (pokud ještě neexistuje)
+// 1. TOTO JE NOVÉ: Povolíme serveru zobrazovat webové stránky (HTML, CSS, JS)
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
-// 3. Endpoint přijímá data a navíc má nyní přístup k databázi (AppDbContext db)
+// Původní endpoint pro ZÁPIS dat ze simulátoru
 app.MapPost("/api/telemetry", async (TelemetryData data, AppDbContext db) =>
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"[SERVER PŘIJAL {data.Timestamp:HH:mm:ss}] - Ukládám do DB...");
     Console.ResetColor();
 
-    Console.WriteLine($"  -> Rychlost: {data.CurrentSpeed} km/h (Cíl: {data.TargetSpeed})");
-    Console.WriteLine($"  -> Palivo:   {data.FuelRemaining} l");
-
-    // Tady se děje to kouzlo: Přidáme přijatá data do tabulky a uložíme
     db.TelemetryRecords.Add(data);
     await db.SaveChangesAsync();
-
     return Results.Ok();
+});
+
+// 2. NOVÝ ENDPOINT: Vrátí úplně ten nejnovější záznam (pro budíky)
+app.MapGet("/api/telemetry/latest", (AppDbContext db) =>
+{
+    var latest = db.TelemetryRecords.OrderByDescending(t => t.Id).FirstOrDefault();
+    return latest is not null ? Results.Ok(latest) : Results.NotFound();
+});
+
+// 3. NOVÝ ENDPOINT: Vrátí posledních 30 záznamů (pro vykreslení grafu)
+app.MapGet("/api/telemetry/history", (AppDbContext db) =>
+{
+    var history = db.TelemetryRecords.OrderByDescending(t => t.Id).Take(30).ToList();
+    history.Reverse(); // Chceme je od nejstaršího po nejnovější zleva doprava
+    return Results.Ok(history);
 });
 
 app.Run();
 
-
-// --- MODELY A DATABÁZOVÁ KONFIGURACE ---
-
-// Třída reprezentující samotnou databázi
+// Modely zůstávají stejné...
 public class AppDbContext : DbContext
 {
-    // Toto je naše tabulka v databázi, do které se budou ukládat záznamy
     public DbSet<TelemetryData> TelemetryRecords { get; set; }
-
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        // Říkáme aplikaci, aby použila SQLite a uložila ho do souboru "telemetry.db"
         optionsBuilder.UseSqlite("Data Source=telemetry.db");
     }
 }
 
-// Třída dat obohacená o Id
 public class TelemetryData
 {
-    public int Id { get; set; } // Primární klíč - databáze si bude číslovat řádky sama (1, 2, 3...)
+    public int Id { get; set; }
     public DateTime Timestamp { get; set; }
     public double CurrentSpeed { get; set; }
     public double TargetSpeed { get; set; }
     public double Distance { get; set; }
     public double FuelRemaining { get; set; }
     public double AverageConsumption { get; set; }
+    public double OilLevel { get; set; }
+    public double CoolantLevel { get; set; }
+    public double TirePressure { get; set; }
 }
