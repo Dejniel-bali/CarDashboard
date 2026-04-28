@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Car Dashboard V8 - Budík paliva</title>
+    <title>Car Dashboard V12 - Teplota a detaily</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -23,7 +23,7 @@
         .warning-lights-container {
             display: flex;
             justify-content: center;
-            gap: 30px;
+            gap: 20px;
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
@@ -32,7 +32,7 @@
             padding: 10px 20px;
             border-radius: 8px;
             font-weight: bold;
-            font-size: 18px;
+            font-size: 16px;
             background-color: #333;
             color: #555;
             border: 2px solid #444;
@@ -52,6 +52,13 @@
                 border-color: #ff9999;
                 box-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
                 animation: blink 0.5s infinite alternate;
+            }
+
+            .indicator.lights-on {
+                background-color: #00cc66;
+                color: #fff;
+                border-color: #66ff99;
+                box-shadow: 0 0 15px rgba(0, 204, 102, 0.8);
             }
 
         .status-banner {
@@ -88,6 +95,13 @@
             animation: blink 1s infinite alternate;
         }
 
+        #defectBanner {
+            background-color: #8b0000;
+            color: #fff;
+            box-shadow: 0 0 30px #ff0000;
+            animation: blinkFast 0.3s infinite alternate;
+        }
+
         @keyframes blink {
             from {
                 opacity: 1;
@@ -95,6 +109,18 @@
 
             to {
                 opacity: 0.4;
+            }
+        }
+
+        @keyframes blinkFast {
+            from {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            to {
+                opacity: 0.6;
+                transform: scale(0.98);
             }
         }
 
@@ -154,7 +180,6 @@
                 margin: 10px 0;
             }
 
-        /* Obal pro budík paliva */
         .gauge-container {
             position: relative;
             height: 100px;
@@ -210,16 +235,19 @@
         }
     </style>
 </head>
-<body>
+<body id="mainBody">
     <div class="header"><h1>🏎️ Živá Telemetrie Vozidla</h1></div>
 
     <div class="warning-lights-container">
+        <div id="indLights" class="indicator">💡 SVĚTLA</div>
         <div id="indOil" class="indicator">🛢️ OLEJ</div>
-        <div id="indCoolant" class="indicator">🌡️ TEPLOTA</div>
-        <div id="indTire" class="indicator">💨 TLAK PNEU</div>
+        <div id="indCoolant" class="indicator">🌡️ -- °C</div>
+        <div id="indTire" class="indicator">💨 PNEU</div>
+        <div id="indWasher" class="indicator">💦 OSTŘIKOVAČE</div>
     </div>
 
-    <div id="pitstopBanner" class="status-banner">🔧 SERVISNÍ ZASTÁVKA - DOPLŇOVÁNÍ... 🔧</div>
+    <div id="defectBanner" class="status-banner">💥 DEFEKT VOZIDLA - ČEKÁNÍ NA OPRAVU 💥</div>
+    <div id="pitstopBanner" class="status-banner">🔧 SERVISNÍ ZASTÁVKA / CHLAZENÍ MOTORU... 🔧</div>
     <div id="emergencyBanner" class="status-banner">⚠️ NOUZOVÝ SJEZD Z DÁLNICE ⚠️</div>
     <div id="brakingBanner" class="status-banner">⚠️ PRUDKÉ BRZDĚNÍ ⚠️</div>
     <div id="highwayBanner" class="status-banner">🛣️ JÍZDA NA DÁLNICI 🛣️</div>
@@ -230,6 +258,7 @@
             <div id="signGraphic" class="speed-limit-sign">--</div>
             <div style="color:#888;">Cílová: <span id="valTarget">0</span> km/h</div>
         </div>
+
         <div class="card" id="cardSpeed" style="border-color: #ff3366;">
             <h3 style="color:#aaa; font-size:14px; margin-top:0;">AKTUÁLNÍ RYCHLOST</h3>
             <div class="value" id="valSpeed">0</div>
@@ -245,10 +274,17 @@
         </div>
 
         <div class="card" style="border-color: #00ffcc;">
-            <h3 style="color:#aaa; font-size:14px; margin-top:0;">SPOTŘEBA</h3>
+            <h3 style="color:#aaa; font-size:14px; margin-top:0;">PRŮM. SPOTŘEBA</h3>
             <div class="value" id="valAvgCons">0</div>
-            <div style="color:#888;">l/100 km</div>
+            <div style="color:#888;">Aktuální: <span id="valCurCons">0</span> l/100</div>
         </div>
+
+        <div class="card" style="border-color: #ffa500;">
+            <h3 style="color:#aaa; font-size:14px; margin-top:0;">ODHADOVANÝ DOJEZD</h3>
+            <div class="value" id="valRange">0</div>
+            <div style="color:#888;">km</div>
+        </div>
+
         <div class="card" style="border-color: #9933ff;">
             <h3 style="color:#aaa; font-size:14px; margin-top:0;">UJETO</h3>
             <div class="value" id="valDistance">0</div>
@@ -264,41 +300,32 @@
     <div class="chart-container"><canvas id="telemetryChart" height="80"></canvas></div>
 
     <script>
-        // --- 1. Inicializace grafu historie ---
         const ctx = document.getElementById('telemetryChart').getContext('2d');
         const telemetryChart = new Chart(ctx, {
             type: 'line',
-            data: { labels: [], datasets: [{ label: 'Rychlost (km/h)', borderColor: '#ff3366', data: [], yAxisID: 'y', tension: 0.4 }, { label: 'Spotřeba (l/100km)', borderColor: '#00ffcc', data: [], yAxisID: 'y1', tension: 0.4 }] },
+            data: { labels: [], datasets: [{ label: 'Rychlost (km/h)', borderColor: '#ff3366', data: [], yAxisID: 'y', tension: 0.4 }, { label: 'Okamžitá spotřeba (l/100km)', borderColor: '#00ffcc', data: [], yAxisID: 'y1', tension: 0.4 }] },
             options: { responsive: true, animation: false, scales: { y: { type: 'linear', position: 'left' }, y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } } } }
         });
 
-        // --- 2. NOVÉ: Inicializace budíku paliva (Doughnut graf jako půlkruh) ---
         const fuelCtx = document.getElementById('fuelGauge').getContext('2d');
         const fuelGauge = new Chart(fuelCtx, {
             type: 'doughnut',
-            data: {
-                labels: ['Palivo', 'Prázdno'],
-                datasets: [{
-                    data: [50, 0], // Výchozí hodnoty (plná nádrž)
-                    backgroundColor: ['#00ffcc', '#333'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                circumference: 180, // Vykreslí jen horní polovinu
-                rotation: -90,      // Začne vykreslovat od leva doprava
-                cutout: '75%',      // Tloušťka budíku
-                plugins: { legend: { display: false }, tooltip: { enabled: false } },
-                animation: { duration: 500 } // Plynulý pohyb ručičky
-            }
+            data: { labels: ['Palivo', 'Prázdno'], datasets: [{ data: [50, 0], backgroundColor: ['#00ffcc', '#333'], borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: -90, cutout: '75%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { duration: 500 } }
         });
 
-        function updateIndicator(element, value, warningLimit, dangerLimit) {
+        // Pomocná funkce (nižší je horší)
+        function updateIndicatorLow(element, value, warningLimit, dangerLimit) {
             element.classList.remove('warning', 'danger');
             if (value < dangerLimit) element.classList.add('danger');
             else if (value < warningLimit) element.classList.add('warning');
+        }
+
+        // Pomocná funkce pro teplotu (vyšší je horší)
+        function updateIndicatorHigh(element, value, warningLimit, dangerLimit) {
+            element.classList.remove('warning', 'danger');
+            if (value >= dangerLimit) element.classList.add('danger');
+            else if (value >= warningLimit) element.classList.add('warning');
         }
 
         async function fetchData() {
@@ -307,56 +334,77 @@
                 if (response.ok) {
                     const data = await response.json();
 
+                    if (data.distance >= 50) {
+                        document.getElementById('mainBody').innerHTML = `
+                                <div style="text-align:center; margin-top:150px;">
+                                    <h1 style="font-size:80px; color:#00ffcc; margin:0;">🏁 CÍL 🏁</h1>
+                                    <p style="font-size:30px;">Auto úspěšně dojelo do cíle (50 km).</p>
+                                    <button onclick="location.reload()" style="padding:15px 30px; font-size:20px; cursor:pointer; background:#1e1e1e; color:white; border:2px solid #00ffcc; border-radius:8px;">Zavřít a obnovit</button>
+                                </div>`;
+                        return;
+                    }
+
                     const currentSpeed = Math.round(data.currentSpeed);
                     const targetSpeed = Math.round(data.targetSpeed);
 
                     document.getElementById('valSpeed').innerText = currentSpeed;
                     document.getElementById('valTarget').innerText = targetSpeed;
                     document.getElementById('valAvgCons').innerText = data.averageConsumption.toFixed(1);
+                    document.getElementById('valCurCons').innerText = data.currentConsumption.toFixed(1);
                     document.getElementById('valDistance').innerText = data.distance.toFixed(2);
+                    document.getElementById('valRange').innerText = data.estimatedRange > 0 ? Math.round(data.estimatedRange) : "---";
 
-                    // --- NOVÉ: Logika zobrazení paliva na budíku ---
                     const fuel = data.fuelRemaining;
                     document.getElementById('valFuelText').innerText = fuel.toFixed(1) + ' L';
 
-                    let fuelColor = '#00ffcc'; // Standardní barva (Zelená/Tyrkysová)
-                    if (fuel < 2.0) fuelColor = '#ff0000'; // Červená (Kritická)
-                    else if (fuel < 10.0) fuelColor = '#ff9900'; // Oranžová (Rezerva)
+                    let fuelColor = '#00ffcc';
+                    if (fuel < 2.0) fuelColor = '#ff0000';
+                    else if (fuel < 10.0) fuelColor = '#ff9900';
 
-                    // Aktualizace dat v budíku (Palivo, Prázdné místo) - Předpokládáme max nádrž 50 litrů
                     fuelGauge.data.datasets[0].data = [fuel, 50 - fuel];
                     fuelGauge.data.datasets[0].backgroundColor = [fuelColor, '#333'];
                     fuelGauge.update();
-
-                    const cardFuel = document.getElementById('cardFuel');
-                    cardFuel.style.borderColor = fuelColor; // I rámeček karty se obarví podle budíku
-                    // ------------------------------------------------
+                    document.getElementById('cardFuel').style.borderColor = fuelColor;
 
                     const signGraphic = document.getElementById('signGraphic');
                     if (targetSpeed === 0) { signGraphic.className = 'stop-sign'; signGraphic.innerText = 'STOP'; }
                     else { signGraphic.className = 'speed-limit-sign'; signGraphic.innerText = targetSpeed; }
 
+                    const indLights = document.getElementById('indLights');
+                    if (data.lightsOn) indLights.classList.add('lights-on');
+                    else indLights.classList.remove('lights-on');
+
                     const indOil = document.getElementById('indOil');
                     const indCoolant = document.getElementById('indCoolant');
                     const indTire = document.getElementById('indTire');
+                    const indWasher = document.getElementById('indWasher');
 
-                    updateIndicator(indOil, data.oilLevel, 20.0, 5.0);
-                    updateIndicator(indCoolant, data.coolantLevel, 20.0, 5.0);
-                    updateIndicator(indTire, data.tirePressure, 2.0, 1.8);
+                    // Výpis a logika barev
+                    updateIndicatorLow(indOil, data.oilLevel, 20.0, 5.0);
+                    updateIndicatorLow(indTire, data.tirePressure, 2.0, 1.8);
+                    updateIndicatorLow(indWasher, data.washerFluidLevel, 20.0, 5.0);
 
+                    // TEPLOTA - Zobrazí číslo a vyhodnotí horní limity
+                    indCoolant.innerText = '🌡️ ' + Math.round(data.coolantTemp) + ' °C';
+                    updateIndicatorHigh(indCoolant, data.coolantTemp, 110.0, 120.0);
+
+                    // Bannery
+                    const defectBanner = document.getElementById('defectBanner');
+                    const pitstopBanner = document.getElementById('pitstopBanner');
+                    const emergencyBanner = document.getElementById('emergencyBanner');
                     const brakingBanner = document.getElementById('brakingBanner');
                     const highwayBanner = document.getElementById('highwayBanner');
-                    const emergencyBanner = document.getElementById('emergencyBanner');
-                    const pitstopBanner = document.getElementById('pitstopBanner');
 
-                    brakingBanner.style.display = 'none'; highwayBanner.style.display = 'none';
-                    emergencyBanner.style.display = 'none'; pitstopBanner.style.display = 'none';
+                    defectBanner.style.display = 'none'; pitstopBanner.style.display = 'none';
+                    emergencyBanner.style.display = 'none'; brakingBanner.style.display = 'none';
+                    highwayBanner.style.display = 'none';
 
-                    const isCritical = data.oilLevel < 5.0 || data.coolantLevel < 5.0 || data.tirePressure < 1.8 || data.fuelRemaining < 2.0;
+                    const isCritical = data.oilLevel < 5.0 || data.coolantTemp >= 120.0 || data.tirePressure < 1.8 || data.fuelRemaining < 2.0;
 
-                    if (targetSpeed === 0) pitstopBanner.style.display = 'block';
+                    if (data.isDefected) defectBanner.style.display = 'block';
+                    else if (targetSpeed === 0) pitstopBanner.style.display = 'block';
                     else if (targetSpeed === 90 && currentSpeed > 95 && isCritical) emergencyBanner.style.display = 'block';
-                    else if (currentSpeed > targetSpeed + 10) brakingBanner.style.display = 'block';
+                    else if (currentSpeed - targetSpeed >= 35) brakingBanner.style.display = 'block';
                     else if (targetSpeed === 130) highwayBanner.style.display = 'block';
 
                     let progress = (data.distance / 50.0) * 100;
@@ -370,10 +418,10 @@
                     const history = await historyRes.json();
                     telemetryChart.data.labels = history.map(h => new Date(h.timestamp).toLocaleTimeString());
                     telemetryChart.data.datasets[0].data = history.map(h => h.currentSpeed);
-                    telemetryChart.data.datasets[1].data = history.map(h => h.averageConsumption);
+                    telemetryChart.data.datasets[1].data = history.map(h => h.currentConsumption);
                     telemetryChart.update();
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { }
         }
 
         setInterval(fetchData, 1000);

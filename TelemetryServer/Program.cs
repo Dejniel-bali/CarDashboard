@@ -70,6 +70,11 @@ public class TelemetryData
     public double FuelRemaining { get; set; }
     public double AverageConsumption { get; set; }
     public double OilLevel { get; set; }
-    public double CoolantLevel { get; set; }
+    public double CoolantTemp { get; set; }
     public double TirePressure { get; set; }
+    public double EstimatedRange { get; set; }
+    public double CurrentConsumption { get; set; }
+    public bool LightsOn { get; set; }         // NOVÉ
+    public double WasherFluidLevel { get; set; } // NOVÉ
+    public bool IsDefected { get; set; }
 }
