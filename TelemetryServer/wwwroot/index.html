@@ -2,11 +2,19 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Car Dashboard V3 - Profi Telemetrie</title>
+    <title>Car Dashboard V3.7 - Profi Telemetrie</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --primary: #00ffcc;
+            --danger: #ff3366;
+            --warning: #ff9900;
+            --bg: #0f0f0f;
+            --card-bg: #1a1a1a;
+        }
+
         body {
-            background-color: #0f0f0f;
+            background-color: var(--bg);
             color: #e0e0e0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -16,29 +24,66 @@
             gap: 20px;
         }
 
-        /* --- HISTORIE VLEVO --- */
         .history-panel {
-            background: #1a1a1a;
+            background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
             border: 1px solid #333;
             height: calc(100vh - 40px);
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .trip-item {
-            padding: 10px;
+            position: relative;
+            padding: 12px;
             border-bottom: 1px solid #333;
             cursor: pointer;
             transition: 0.2s;
+            padding-right: 45px;
         }
 
             .trip-item:hover {
                 background: #252525;
-                color: #00ffcc;
             }
 
-        /* --- HLAVNÍ OBSAH --- */
+            .trip-item b {
+                color: var(--primary);
+                display: block;
+                margin-bottom: 4px;
+            }
+
+        .btn-delete {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #441111;
+            color: #ff5555;
+            border: 1px solid #662222;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+            .btn-delete:hover {
+                background: #aa0000;
+                color: white;
+            }
+
+        .btn-live {
+            width: 100%;
+            padding: 10px;
+            margin-top: auto;
+            background: var(--primary);
+            color: black;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
         .main-content {
             display: flex;
             flex-direction: column;
@@ -48,14 +93,13 @@
             padding-right: 10px;
         }
 
-        /* Hlavička */
         .header {
             text-align: center;
         }
 
             .header h1 {
-                margin: 0 0 5px 0;
-                color: #00ffcc;
+                margin: 0;
+                color: var(--primary);
                 font-size: 28px;
             }
 
@@ -66,7 +110,6 @@
             min-height: 25px;
         }
 
-        /* Kontrolky */
         .warning-lights-container {
             display: flex;
             justify-content: center;
@@ -78,36 +121,30 @@
             padding: 8px 15px;
             border-radius: 8px;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 13px;
             background-color: #333;
             color: #555;
             border: 2px solid #444;
-            transition: all 0.3s;
+            transition: 0.3s;
         }
-
-            .indicator.warning {
-                background-color: #ff9900;
-                color: #fff;
-                border-color: #ffcc66;
-                box-shadow: 0 0 15px rgba(255, 153, 0, 0.6);
-            }
-
-            .indicator.danger {
-                background-color: #ff0000;
-                color: #fff;
-                border-color: #ff9999;
-                box-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
-                animation: blink 0.5s infinite alternate;
-            }
 
             .indicator.lights-on {
                 background-color: #00cc66;
                 color: #fff;
-                border-color: #66ff99;
-                box-shadow: 0 0 15px rgba(0, 204, 102, 0.8);
+                box-shadow: 0 0 10px #00cc66;
             }
 
-        /* Bannery */
+            .indicator.warning {
+                background-color: var(--warning);
+                color: #fff;
+            }
+
+            .indicator.danger {
+                background-color: var(--danger);
+                color: #fff;
+                animation: blink 0.5s infinite alternate;
+            }
+
         .status-banner {
             text-align: center;
             font-size: 20px;
@@ -115,7 +152,6 @@
             padding: 10px;
             border-radius: 8px;
             text-transform: uppercase;
-            letter-spacing: 2px;
             display: none;
             margin-bottom: 5px;
         }
@@ -123,41 +159,17 @@
         #waitingBanner {
             display: block;
             background-color: #1e1e1e;
-            color: #00ffcc;
-            border: 2px dashed #00ffcc;
+            color: var(--primary);
+            border: 2px dashed var(--primary);
             animation: pulse 2s infinite;
         }
 
         #brakingBanner {
-            background-color: #ff0000;
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
-            animation: blink 0.5s infinite alternate;
+            background-color: var(--danger);
+            color: white;
+            animation: blink 0.3s infinite;
         }
 
-        #highwayBanner {
-            background-color: #0066ff;
-            box-shadow: 0 0 20px rgba(0, 102, 255, 0.8);
-        }
-
-        #emergencyBanner {
-            background-color: #ff6600;
-            box-shadow: 0 0 20px rgba(255, 102, 0, 0.8);
-        }
-
-        #pitstopBanner {
-            background-color: #990000;
-            box-shadow: 0 0 20px rgba(153, 0, 0, 0.8);
-            animation: blink 1s infinite alternate;
-        }
-
-        #defectBanner {
-            background-color: #8b0000;
-            color: #fff;
-            box-shadow: 0 0 30px #ff0000;
-            animation: blinkFast 0.3s infinite alternate;
-        }
-
-        /* Dashboard Mřížka */
         .dashboard-grid {
             display: grid;
             grid-template-columns: 1fr auto 1fr;
@@ -171,23 +183,20 @@
         }
 
         .card {
-            background: #1a1a1a;
+            background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
-            border-top: 4px solid #00ffcc;
+            border-top: 4px solid var(--primary);
             text-align: center;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
 
-            .card .value {
-                font-size: 34px;
-                font-weight: bold;
-                color: #fff;
-                margin: 5px 0;
-            }
+        .value {
+            font-size: 34px;
+            font-weight: bold;
+            color: #fff;
+            margin: 5px 0;
+        }
 
         .card-title {
             color: #aaa;
@@ -196,7 +205,6 @@
             text-transform: uppercase;
         }
 
-        /* Značky a Budíky */
         .speed-limit-sign {
             width: 60px;
             height: 60px;
@@ -226,29 +234,12 @@
             clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
         }
 
-        .gauge-container {
-            position: relative;
-            height: 90px;
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            margin-top: 10px;
-        }
-
-        .gauge-text {
-            position: absolute;
-            bottom: 0;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        /* Auto a pneu */
         .car-viz {
             position: relative;
             width: 160px;
             height: 300px;
             background: #222;
-            margin: 10px auto 0 auto;
+            margin: 10px auto;
             border-radius: 40px;
             border: 2px solid #444;
         }
@@ -265,7 +256,7 @@
             justify-content: center;
             font-size: 13px;
             font-weight: bold;
-            color: #00ffcc;
+            color: var(--primary);
             border: 2px solid #333;
             transition: all 0.3s;
         }
@@ -291,47 +282,58 @@
             }
 
             .tire.danger {
-                background-color: #990000;
-                color: #ffffff;
-                border-color: #ff3333;
-                box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+                background: #880000;
+                color: white;
+                border-color: red;
                 animation: blinkFast 0.3s infinite alternate;
             }
 
-        /* Trasa */
         .route-container {
-            background: #1a1a1a;
+            background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
         }
 
         .progress-bar-bg {
             background: #333;
-            height: 15px;
-            border-radius: 8px;
-            width: 100%;
+            height: 12px;
+            border-radius: 10px;
             position: relative;
             margin-top: 10px;
         }
 
         .progress-bar-fill {
-            background: linear-gradient(90deg, #00ffcc, #0099ff);
+            background: linear-gradient(90deg, var(--primary), #0099ff);
             height: 100%;
             width: 0%;
-            transition: width 0.5s ease;
-            border-radius: 8px;
+            border-radius: 10px;
+            transition: 0.5s;
         }
 
         .car-icon {
             position: absolute;
-            top: -8px;
+            top: -10px;
             font-size: 20px;
-            transition: left 0.5s ease;
+            transition: left 0.5s;
             transform: scaleX(-1);
-            display: inline-block;
         }
 
-        /* Grafy */
+        .gauge-container {
+            position: relative;
+            height: 90px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+
+        .gauge-text {
+            position: absolute;
+            bottom: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
         .charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -339,7 +341,7 @@
         }
 
         .chart-container {
-            background: #1a1a1a;
+            background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
             height: 220px;
@@ -384,15 +386,13 @@
 </head>
 <body>
 
-    <!-- LEVÝ PANEL - HISTORIE -->
     <div class="history-panel">
-        <h3 style="margin-top: 0; color: #00ffcc; border-bottom: 1px solid #333; padding-bottom: 10px;">📂 HISTORIE JÍZD</h3>
-        <div id="tripList" style="color: #888;">Načítám jízdy...</div>
+        <h3 style="color: var(--primary); margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px;">📂 HISTORIE JÍZD</h3>
+        <div id="tripList" style="flex-grow: 1; overflow-y: auto;">Načítám...</div>
+        <button class="btn-live" id="btnLive" style="display:none;" onclick="exitHistory()">Zpět na živá data</button>
     </div>
 
-    <!-- PRAVÝ PANEL - HLAVNÍ OBSAH -->
     <div class="main-content">
-
         <div class="header">
             <h1 id="dashTitle">🏎️ ŽIVÁ TELEMETRIE</h1>
             <div class="status-text" id="dashStatus">⏳ ČEKÁM NA DATA...</div>
@@ -407,35 +407,32 @@
         </div>
 
         <div id="waitingBanner" class="status-banner">⏳ ČEKÁM NA ODESLÁNÍ PŘÍKAZU START Z DISPEČINKU... ⏳</div>
-        <div id="defectBanner" class="status-banner">💥 DEFEKT VOZIDLA - ČEKÁNÍ NA OPRAVU 💥</div>
-        <div id="pitstopBanner" class="status-banner">🔧 SERVISNÍ ZASTÁVKA / CHLAZENÍ MOTORU... 🔧</div>
-        <div id="emergencyBanner" class="status-banner">⚠️ NOUZOVÝ SJEZD Z DÁLNICE ⚠️</div>
+        <div id="defectBanner" class="status-banner" style="background: #8b0000; color: white;">💥 DEFEKT VOZIDLA - ČEKÁNÍ NA OPRAVU 💥</div>
+        <div id="pitstopBanner" class="status-banner" style="background-color: #990000; box-shadow: 0 0 20px rgba(153, 0, 0, 0.8); animation: blink 1s infinite alternate;">🔧 SERVISNÍ ZASTÁVKA / CHLAZENÍ MOTORU... 🔧</div>
+        <div id="emergencyBanner" class="status-banner" style="background-color: #ff6600; box-shadow: 0 0 20px rgba(255, 102, 0, 0.8);">⚠️ NOUZOVÝ SJEZD Z DÁLNICE ⚠️</div>
         <div id="brakingBanner" class="status-banner">⚠️ PRUDKÉ BRZDĚNÍ ⚠️</div>
-        <div id="highwayBanner" class="status-banner">🛣️ JÍZDA NA DÁLNICI 🛣️</div>
+        <div id="highwayBanner" class="status-banner" style="background-color: #0066ff; box-shadow: 0 0 20px rgba(0, 102, 255, 0.8);">🛣️ JÍZDA NA DÁLNICI 🛣️</div>
 
         <div class="dashboard-grid">
-
-            <!-- Sloupec 1 -->
             <div class="col">
                 <div class="card" style="border-top-color: #ffffff;">
-                    <div class="card-title">POVOLENÁ RYCHLOST</div>
+                    <div class="card-title">MAXIMÁLNÍ POVOLENÁ RYCHLOST</div>
                     <div id="signGraphic" class="speed-limit-sign">--</div>
-                    <div style="color:#888; font-size: 14px;">Cílová: <span id="valTarget">0</span> km/h</div>
+                    <div style="color:#888; font-size: 14px;">Cíl auta: <span id="valTarget">0</span> km/h</div>
                 </div>
-                <div class="card" style="border-top-color: #ff3366;">
+                <div class="card" style="border-top-color: var(--danger);">
                     <div class="card-title">AKTUÁLNÍ RYCHLOST</div>
                     <div class="value" id="valSpeed">0</div>
                     <div style="color:#888">km/h</div>
                 </div>
-                <div class="card" style="border-top-color: #ffa500;">
+                <div class="card" style="border-top-color: var(--warning);">
                     <div class="card-title">ODHADOVANÝ DOJEZD</div>
                     <div class="value" id="valRange">0</div>
                     <div style="color:#888">km</div>
                 </div>
             </div>
 
-            <!-- Sloupec 2 (Auto) -->
-            <div class="card" style="border-top-color: #ffffff;">
+            <div class="card" style="border-top-color: #fff;">
                 <div class="card-title">TLAK PNEUMATIK (bar)</div>
                 <div class="car-viz">
                     <div class="tire fl" id="tireFL">--</div>
@@ -445,16 +442,15 @@
                 </div>
             </div>
 
-            <!-- Sloupec 3 -->
             <div class="col">
-                <div class="card" id="cardFuel" style="border-top-color: #00ffcc;">
+                <div class="card" id="cardFuel" style="border-top-color: var(--primary);">
                     <div class="card-title">STAV NÁDRŽE</div>
                     <div class="gauge-container">
                         <canvas id="fuelGauge"></canvas>
                         <div class="gauge-text" id="valFuelText">0.0 L</div>
                     </div>
                 </div>
-                <div class="card" style="border-top-color: #00ffcc;">
+                <div class="card" style="border-top-color: var(--primary);">
                     <div class="card-title">SPOTŘEBA</div>
                     <div class="value" id="valCons">0.0</div>
                     <div style="color:#888; font-size:14px;">Průměr: <span id="valAvgCons">0.0</span></div>
@@ -465,7 +461,6 @@
                     <div style="color:#888; font-size:14px;">Cíl: <span id="valTargetDistText">--</span> km</div>
                 </div>
             </div>
-
         </div>
 
         <div class="route-container">
@@ -477,40 +472,18 @@
             <div class="chart-container"><canvas id="speedChart"></canvas></div>
             <div class="chart-container"><canvas id="consChart"></canvas></div>
         </div>
-
     </div>
 
     <script>
         let speedChart, consChart, fuelGauge;
         let isViewingHistory = false;
+        let lastSpeed = 0;
         let targetReachedAlertShown = false;
 
-        function initCharts() {
-            const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: '#222' }, ticks: { color: '#888' } }, y: { grid: { color: '#222' }, ticks: { color: '#888' } } }, plugins: { legend: { labels: { color: '#fff' } } } };
-
-            speedChart = new Chart(document.getElementById('speedChart'), {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: 'Rychlost (km/h)', borderColor: '#ff3366', data: [], tension: 0.3, fill: true, backgroundColor: 'rgba(255, 51, 102, 0.1)', pointRadius: 0 }] },
-                options: commonOptions
-            });
-
-            consChart = new Chart(document.getElementById('consChart'), {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: 'Spotřeba (l/100km)', borderColor: '#00ffcc', data: [], tension: 0.3, fill: true, backgroundColor: 'rgba(0, 255, 204, 0.1)', pointRadius: 0 }] },
-                options: commonOptions
-            });
-
-            const fuelCtx = document.getElementById('fuelGauge').getContext('2d');
-            fuelGauge = new Chart(fuelCtx, {
-                type: 'doughnut',
-                data: { labels: ['Palivo', 'Prázdno'], datasets: [{ data: [50, 0], backgroundColor: ['#00ffcc', '#333'], borderWidth: 0 }] },
-                options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: -90, cutout: '75%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { duration: 500 } }
-            });
-        }
-
-        // Nakešování UI elementů
         const ui = {
             mainBody: document.getElementById('mainBody'),
+            dashTitle: document.getElementById('dashTitle'),
+            dashStatus: document.getElementById('dashStatus'),
             valSpeed: document.getElementById('valSpeed'),
             valTarget: document.getElementById('valTarget'),
             valAvgCons: document.getElementById('valAvgCons'),
@@ -533,17 +506,53 @@
             brakingBanner: document.getElementById('brakingBanner'),
             highwayBanner: document.getElementById('highwayBanner'),
             routeFill: document.getElementById('routeFill'),
-            routeCar: document.getElementById('routeCar')
+            routeCar: document.getElementById('routeCar'),
+            btnLive: document.getElementById('btnLive')
         };
+
+        function initCharts() {
+            const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: '#222' }, ticks: { color: '#888' } } }, plugins: { legend: { display: false } }, animation: false };
+
+            speedChart = new Chart(document.getElementById('speedChart'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Rychlost (km/h)', borderColor: '#ff3366', data: [], tension: 0.3, fill: true, backgroundColor: 'rgba(255, 51, 102, 0.1)', pointRadius: 0 }] },
+                options: commonOptions
+            });
+
+            consChart = new Chart(document.getElementById('consChart'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Spotřeba (l/100km)', borderColor: '#00ffcc', data: [], tension: 0.3, fill: true, backgroundColor: 'rgba(0, 255, 204, 0.1)', pointRadius: 0 }] },
+                options: commonOptions
+            });
+
+            const fuelCtx = document.getElementById('fuelGauge').getContext('2d');
+            fuelGauge = new Chart(fuelCtx, {
+                type: 'doughnut',
+                data: { labels: ['Palivo', 'Prázdno'], datasets: [{ data: [50, 0], backgroundColor: ['#00ffcc', '#333'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: -90, cutout: '75%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { duration: 500 } }
+            });
+        }
+
+        async function deleteTrip(tripId, event) {
+            event.stopPropagation();
+            if (!confirm(`Smazat jízdu ${tripId}?`)) return;
+            try {
+                const res = await fetch(`/api/history/trip/${tripId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (isViewingHistory && ui.dashTitle.innerText.includes(tripId)) exitHistory();
+                    loadHistory();
+                }
+            } catch (e) { console.error(e); }
+        }
 
         function setTireStatus(id, pressure) {
             const el = document.getElementById(id);
-            const classes = `tire ${id.replace('tire', '').toLowerCase()}`;
+            const pos = id.replace('tire', '').toLowerCase();
             if (pressure < 1.8) {
-                el.className = classes + " danger";
+                el.className = `tire danger ${pos}`;
                 el.innerHTML = `💥<br>${pressure.toFixed(1)}`;
             } else {
-                el.className = classes;
+                el.className = `tire ${pos}`;
                 el.innerHTML = `${pressure.toFixed(2)}`;
             }
         }
@@ -563,41 +572,41 @@
         }
 
         function resetDashboard() {
-            if (ui.valSpeed) ui.valSpeed.innerText = "0";
-            if (ui.valTarget) ui.valTarget.innerText = "0";
-            if (ui.valAvgCons) ui.valAvgCons.innerText = "0.0";
-            if (ui.valCurCons) ui.valCurCons.innerText = "0.0";
-            if (ui.valDistance) ui.valDistance.innerText = "0.00";
-            if (ui.valRange) ui.valRange.innerText = "---";
-            if (ui.valFuelText) ui.valFuelText.innerText = "0.0 L";
-            if (ui.routeTargetText) ui.routeTargetText.innerText = "--";
-            if (ui.valTargetDistText) ui.valTargetDistText.innerText = "--";
+            ui.valSpeed.innerText = "0";
+            ui.valTarget.innerText = "0";
+            ui.valAvgCons.innerText = "0.0";
+            ui.valCurCons.innerText = "0.0";
+            ui.valDistance.innerText = "0.00";
+            ui.valRange.innerText = "---";
+            ui.valFuelText.innerText = "0.0 L";
+            ui.routeTargetText.innerText = "--";
+            ui.valTargetDistText.innerText = "--";
 
             fuelGauge.data.datasets[0].data = [0, 50];
             fuelGauge.update();
-            if (ui.cardFuel) ui.cardFuel.style.borderColor = '#00ffcc';
+            ui.cardFuel.style.borderColor = '#00ffcc';
 
-            if (ui.signGraphic) { ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = '--'; }
+            ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = '--';
 
-            if (ui.indLights) ui.indLights.classList.remove('lights-on');
+            ui.indLights.classList.remove('lights-on');
             updateIndicatorLow(ui.indOil, 100, 20.0, 5.0);
             updateIndicatorLow(ui.indWasher, 100, 20.0, 5.0);
-            if (ui.indCoolant) { ui.indCoolant.innerText = '🌡️ -- °C'; ui.indCoolant.classList.remove('warning', 'danger'); }
+            ui.indCoolant.innerText = '🌡️ -- °C'; ui.indCoolant.classList.remove('warning', 'danger');
 
             setTireStatus('tireFL', 2.4); setTireStatus('tireFR', 2.4);
             setTireStatus('tireRL', 2.3); setTireStatus('tireRR', 2.3);
 
-            if (ui.defectBanner) ui.defectBanner.style.display = 'none';
-            if (ui.pitstopBanner) ui.pitstopBanner.style.display = 'none';
-            if (ui.emergencyBanner) ui.emergencyBanner.style.display = 'none';
-            if (ui.brakingBanner) ui.brakingBanner.style.display = 'none';
-            if (ui.highwayBanner) ui.highwayBanner.style.display = 'none';
-            if (ui.waitingBanner) ui.waitingBanner.style.display = 'block';
+            ui.defectBanner.style.display = 'none';
+            ui.pitstopBanner.style.display = 'none';
+            ui.emergencyBanner.style.display = 'none';
+            ui.brakingBanner.style.display = 'none';
+            ui.highwayBanner.style.display = 'none';
+            ui.waitingBanner.style.display = 'block';
 
-            document.getElementById('dashStatus').innerHTML = "<span style='color:#888;'>⏳ PŘIPRAVENO - ČEKÁM NA START</span>";
+            ui.dashStatus.innerHTML = "<span style='color:#888;'>⏳ PŘIPRAVENO - ČEKÁM NA START</span>";
 
-            if (ui.routeFill) ui.routeFill.style.width = '0%';
-            if (ui.routeCar) ui.routeCar.style.left = '-20px';
+            ui.routeFill.style.width = '0%';
+            ui.routeCar.style.left = '-20px';
 
             speedChart.data.labels = []; speedChart.data.datasets[0].data = [];
             consChart.data.labels = []; consChart.data.datasets[0].data = [];
@@ -605,7 +614,6 @@
         }
 
         async function updateUI(data) {
-            // --- BLBUVZDORNÉ NAČÍTÁNÍ S OCHRANOU PROTI NaN ---
             const rawTargetDist = Number(data.targetDistance ?? data.TargetDistance) || 50;
             const dynamicTargetDist = rawTargetDist > 0 ? rawTargetDist : 50;
             const rawMaxFuel = Number(data.maxFuelCapacity ?? data.MaxFuelCapacity) || 50;
@@ -619,7 +627,6 @@
             const avgCons = Number(data.averageConsumption ?? data.AverageConsumption) || 0;
             const curCons = Number(data.currentConsumption ?? data.CurrentConsumption) || 0;
 
-            // Čísla a texty
             ui.valSpeed.innerText = currentSpeed;
             ui.valTarget.innerText = targetSpeed;
             ui.valCurCons.innerText = curCons.toFixed(1);
@@ -629,9 +636,23 @@
             ui.valTargetDistText.innerText = dynamicTargetDist;
             ui.routeTargetText.innerText = dynamicTargetDist;
 
-            // Značka s rychlostí
-            if (targetSpeed === 0) { ui.signGraphic.className = 'stop-sign'; ui.signGraphic.innerText = 'STOP'; }
-            else { ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = targetSpeed; }
+            // Značka s cílovou rychlostí
+            if (distance >= dynamicTargetDist || (distance === 0 && currentSpeed === 0)) {
+                ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = '--';
+            } else if (targetSpeed === 0) {
+                ui.signGraphic.className = 'stop-sign'; ui.signGraphic.innerText = 'STOP';
+            } else {
+                ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = targetSpeed;
+            }
+
+            // Heavy Braking logic
+            const speedDrop = lastSpeed - currentSpeed;
+            if (speedDrop > 8 && currentSpeed > 5) {
+                ui.brakingBanner.style.display = 'block';
+            } else {
+                ui.brakingBanner.style.display = 'none';
+            }
+            lastSpeed = currentSpeed;
 
             // Palivo graf
             ui.valFuelText.innerText = fuel.toFixed(1) + ' L';
@@ -671,28 +692,25 @@
             ui.defectBanner.style.display = 'none';
             ui.pitstopBanner.style.display = 'none';
             ui.emergencyBanner.style.display = 'none';
-            ui.brakingBanner.style.display = 'none';
             ui.highwayBanner.style.display = 'none';
 
-            const statusEl = document.getElementById('dashStatus');
             const isCritical = oil < 5.0 || coolant >= 120.0 || fuel < 2.0;
             const isDefected = data.isDefected ?? data.IsDefected ?? false;
 
             if (isDefected) {
-                statusEl.innerHTML = "<span style='color:#ff3333; animation: pulse 1s infinite;'>💥 DEFEKT - ČEKÁNÍ NA OPRAVU V SERVISU</span>";
+                ui.dashStatus.innerHTML = "<span style='color:var(--danger); animation: pulse 1s infinite;'>💥 DEFEKT - ČEKÁNÍ NA OPRAVU V SERVISU</span>";
                 ui.defectBanner.style.display = 'block';
             } else if (targetSpeed === 0 && currentSpeed < 1 && distance > 0 && distance < dynamicTargetDist) {
-                statusEl.innerHTML = "<span style='color:#ff9900;'>🔧 SERVISNÍ ZASTÁVKA (DOFUKOVÁNÍ / CHLAZENÍ)</span>";
+                ui.dashStatus.innerHTML = "<span style='color:var(--warning);'>🔧 SERVISNÍ ZASTÁVKA (DOFUKOVÁNÍ / CHLAZENÍ)</span>";
                 ui.pitstopBanner.style.display = 'block';
             } else if (distance >= dynamicTargetDist && dynamicTargetDist > 0) {
-                statusEl.innerHTML = "<span style='color:#00ffcc;'>🏁 AUTO JE V CÍLI</span>";
+                ui.dashStatus.innerHTML = "<span style='color:var(--primary);'>🏁 AUTO JE V CÍLI</span>";
             } else if (distance === 0 && targetSpeed === 0) {
-                statusEl.innerHTML = "<span style='color:#888;'>⏳ PŘIPRAVENO - ČEKÁM NA START</span>";
+                ui.dashStatus.innerHTML = "<span style='color:#888;'>⏳ PŘIPRAVENO - ČEKÁM NA START</span>";
                 ui.waitingBanner.style.display = 'block';
             } else {
-                statusEl.innerHTML = "<span style='color:#00cc66;'>✅ PROVOZ NORMÁLNÍ</span>";
+                ui.dashStatus.innerHTML = "<span style='color:#00cc66;'>✅ PROVOZ NORMÁLNÍ</span>";
                 if (targetSpeed === 90 && currentSpeed > 95 && isCritical) ui.emergencyBanner.style.display = 'block';
-                else if (currentSpeed - targetSpeed >= 35) ui.brakingBanner.style.display = 'block';
                 else if (targetSpeed === 130) ui.highwayBanner.style.display = 'block';
             }
 
@@ -712,9 +730,10 @@
                     if (trips.length === 0) { list.innerHTML = "Zatím žádné jízdy."; return; }
                     list.innerHTML = trips.map(t => `
                             <div class="trip-item" onclick="viewTrip('${t.tripId}')">
-                                <b style="color:#00ffcc;">Jízda: ${t.tripId.split('-')[1]}</b> (${t.carType})<br>
-                                <small style="color:#aaa;">${new Date(t.start).toLocaleTimeString()}</small><br>
+                                <b style="color:#00ffcc;">Jízda: ${t.tripId.split('-')[1] || t.tripId}</b>
+                                <small style="color:#aaa;">${t.carType} • ${new Date(t.start).toLocaleTimeString()}</small><br>
                                 <span style="font-size:12px;">Ujeto: ${t.distance.toFixed(1)} km</span>
+                                <button class="btn-delete" onclick="deleteTrip('${t.tripId}', event)" title="Smazat jízdu">🗑️</button>
                             </div>
                         `).join('');
                 }
@@ -723,33 +742,38 @@
 
         async function viewTrip(tripId) {
             isViewingHistory = true;
-            document.getElementById('dashTitle').innerText = "📂 ARCHIV: " + tripId;
-            document.getElementById('dashStatus').innerHTML = "<span style='color:#aaa;'>Prohlížení historického záznamu</span>";
+            ui.btnLive.style.display = 'block';
+            ui.dashTitle.innerText = "📂 ARCHIV: " + tripId;
+            ui.dashStatus.innerHTML = "<span style='color:#aaa;'>Prohlížení historického záznamu</span>";
 
             const res = await fetch('/api/history/trip/' + tripId);
             const data = await res.json();
 
-            const labels = data.map(d => new Date(d.timestamp ?? d.Timestamp).toLocaleTimeString());
-            speedChart.data.labels = labels;
-            speedChart.data.datasets[0].data = data.map(d => d.currentSpeed ?? d.CurrentSpeed);
-            consChart.data.labels = labels;
-            consChart.data.datasets[0].data = data.map(d => d.currentConsumption ?? d.CurrentConsumption);
+            if (data.length > 0) {
+                const labels = data.map(d => new Date(d.timestamp ?? d.Timestamp).toLocaleTimeString());
+                speedChart.data.labels = labels;
+                speedChart.data.datasets[0].data = data.map(d => d.currentSpeed ?? d.CurrentSpeed);
+                consChart.data.labels = labels;
+                consChart.data.datasets[0].data = data.map(d => d.currentConsumption ?? d.CurrentConsumption);
 
-            speedChart.update();
-            consChart.update();
-            updateUI(data[data.length - 1]);
+                speedChart.update();
+                consChart.update();
+                updateUI(data[data.length - 1]);
+            }
+        }
+
+        function exitHistory() {
+            isViewingHistory = false;
+            ui.btnLive.style.display = 'none';
+            ui.dashTitle.innerText = "🏎️ ŽIVÁ TELEMETRIE";
+            speedChart.data.labels = []; speedChart.data.datasets[0].data = [];
+            consChart.data.labels = []; consChart.data.datasets[0].data = [];
+            speedChart.update(); consChart.update();
         }
 
         document.addEventListener('keydown', function (event) {
             if (event.key === 'a' || event.key === 'A') window.open('/admin.html', '_blank');
-            if (event.key === 'Escape' && isViewingHistory) {
-                isViewingHistory = false;
-                document.getElementById('dashTitle').innerText = "🏎️ ŽIVÁ TELEMETRIE";
-                // Pokud zrovna nejede simulace, vyčistí se graf
-                speedChart.data.labels = []; speedChart.data.datasets[0].data = [];
-                consChart.data.labels = []; consChart.data.datasets[0].data = [];
-                speedChart.update(); consChart.update();
-            }
+            if (event.key === 'Escape' && isViewingHistory) exitHistory();
         });
 
         async function tick() {

@@ -38,8 +38,18 @@ namespace CarSimulator
                             simMultiplier = 1;
                             break;
                         case "stop": isRunning = false; break;
-                        case "sim_faster": simMultiplier = Math.Min(10, simMultiplier + 1); break;
-                        case "sim_slower": simMultiplier = Math.Max(1, simMultiplier - 1); break;
+                        case "sim_faster":
+                            if (simMultiplier == 1) simMultiplier = 2;
+                            else if (simMultiplier == 2) simMultiplier = 3;
+                            else if (simMultiplier == 3) simMultiplier = 5;
+                            else if (simMultiplier == 5) simMultiplier = 10;
+                            break;
+                        case "sim_slower":
+                            if (simMultiplier == 10) simMultiplier = 5;
+                            else if (simMultiplier == 5) simMultiplier = 3;
+                            else if (simMultiplier == 3) simMultiplier = 2;
+                            else if (simMultiplier == 2) simMultiplier = 1;
+                            break;
                         case "drop_oil": car.OilLevel = 4.0; break;
                         case "drop_water": car.IsOverheating = true; break;
 

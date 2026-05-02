@@ -76,6 +76,7 @@ app.MapDelete("/api/history/trip/{id}", async (string id, TelemetryDb db) => {
     }
     return Results.NotFound();
 });
+
 app.Run();
 
 public class TelemetryDb : DbContext
@@ -98,6 +99,7 @@ public class TelemetryData
     public double OilLevel { get; set; }
     public double CoolantTemp { get; set; }
     public double EstimatedRange { get; set; }
+    public double TargetSpeed { get; set; }
     public bool LightsOn { get; set; }
     public double WasherFluidLevel { get; set; }
     public bool IsDefected { get; set; }
