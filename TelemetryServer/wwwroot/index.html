@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Car Dashboard V3.7 - Profi Telemetrie</title>
+    <title>Car Dashboard V4.1 - Profi Telemetrie</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -24,6 +24,7 @@
             gap: 20px;
         }
 
+        /* --- HISTORIE VLEVO --- */
         .history-panel {
             background: var(--card-bg);
             padding: 15px;
@@ -84,6 +85,7 @@
             cursor: pointer;
         }
 
+        /* --- HLAVNÍ OBSAH --- */
         .main-content {
             display: flex;
             flex-direction: column;
@@ -334,6 +336,7 @@
             font-weight: bold;
         }
 
+        /* Grafy */
         .charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -344,7 +347,56 @@
             background: var(--card-bg);
             padding: 15px;
             border-radius: 12px;
-            height: 220px;
+            height: 250px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            flex-grow: 1;
+        }
+
+        /* --- STATISTIKY --- */
+        .stats-section-title {
+            color: var(--primary);
+            margin-top: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+            font-size: 16px;
+            letter-spacing: 1px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border-bottom: 3px solid #444;
+        }
+
+            .stat-card .value {
+                font-size: 28px;
+                margin: 0;
+            }
+
+        .stat-unit {
+            font-size: 14px;
+            color: #888;
+            font-weight: normal;
+        }
+
+        .stat-note {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
         }
 
         @keyframes blink {
@@ -416,7 +468,7 @@
         <div class="dashboard-grid">
             <div class="col">
                 <div class="card" style="border-top-color: #ffffff;">
-                    <div class="card-title">MAXIMÁLNÍ POVOLENÁ RYCHLOST</div>
+                    <div class="card-title">CÍLOVÁ RYCHLOST</div>
                     <div id="signGraphic" class="speed-limit-sign">--</div>
                     <div style="color:#888; font-size: 14px;">Cíl auta: <span id="valTarget">0</span> km/h</div>
                 </div>
@@ -469,9 +521,38 @@
         </div>
 
         <div class="charts-grid">
-            <div class="chart-container"><canvas id="speedChart"></canvas></div>
-            <div class="chart-container"><canvas id="consChart"></canvas></div>
+            <div class="chart-container">
+                <div class="card-title" style="text-align: center; margin-bottom: 10px;">PRŮBĚH RYCHLOSTI (km/h)</div>
+                <div class="chart-wrapper"><canvas id="speedChart"></canvas></div>
+            </div>
+            <div class="chart-container">
+                <div class="card-title" style="text-align: center; margin-bottom: 10px;">PRŮBĚH SPOTŘEBY (l/100km)</div>
+                <div class="chart-wrapper"><canvas id="consChart"></canvas></div>
+            </div>
         </div>
+
+        <!-- NOVÁ SEKCE STATISTIK S PŘEPOČTEM NA KČ -->
+        <h3 class="stats-section-title">📊 SOUHRNNÉ STATISTIKY JÍZDY</h3>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="card-title">MAXIMÁLNÍ RYCHLOST</div>
+                <div class="value"><span id="statMaxSpeed">0</span> <span class="stat-unit">km/h</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="card-title">PRUDKÉ BRZDĚNÍ</div>
+                <div class="value"><span id="statBraking">0</span> <span class="stat-unit">x</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="card-title">CENA JÍZDY</div>
+                <div class="value"><span id="statTripCost">0.0</span> <span class="stat-unit">Kč</span></div>
+                <div class="stat-note">(počítáno 39,90 Kč / 1 L)</div>
+            </div>
+            <div class="stat-card">
+                <div class="card-title">ČAS JÍZDY</div>
+                <div class="value" id="statDuration">00:00</div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -479,6 +560,11 @@
         let isViewingHistory = false;
         let lastSpeed = 0;
         let targetReachedAlertShown = false;
+
+        const FUEL_PRICE = 39.90; // Konstanta pro cenu benzínu
+
+        // Objekt pro sběr živých statistik
+        let liveStats = { tripId: null, maxSpeed: 0, brakingCount: 0, startTime: null, isBrakingEvent: false };
 
         const ui = {
             mainBody: document.getElementById('mainBody'),
@@ -507,11 +593,17 @@
             highwayBanner: document.getElementById('highwayBanner'),
             routeFill: document.getElementById('routeFill'),
             routeCar: document.getElementById('routeCar'),
-            btnLive: document.getElementById('btnLive')
+            btnLive: document.getElementById('btnLive'),
+
+            // Nové staty
+            statMaxSpeed: document.getElementById('statMaxSpeed'),
+            statBraking: document.getElementById('statBraking'),
+            statTripCost: document.getElementById('statTripCost'), // Změněno z FuelUsed
+            statDuration: document.getElementById('statDuration')
         };
 
         function initCharts() {
-            const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: '#222' }, ticks: { color: '#888' } } }, plugins: { legend: { display: false } }, animation: false };
+            const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { display: true, grid: { color: '#333' }, ticks: { color: '#aaa', maxTicksLimit: 7, maxRotation: 0 } }, y: { grid: { color: '#222' }, ticks: { color: '#888' } } }, plugins: { legend: { display: false } }, animation: false };
 
             speedChart = new Chart(document.getElementById('speedChart'), {
                 type: 'line',
@@ -611,6 +703,52 @@
             speedChart.data.labels = []; speedChart.data.datasets[0].data = [];
             consChart.data.labels = []; consChart.data.datasets[0].data = [];
             speedChart.update(); consChart.update();
+
+            // Reset statistik
+            ui.statMaxSpeed.innerText = "0";
+            ui.statBraking.innerText = "0";
+            ui.statTripCost.innerText = "0.0";
+            ui.statDuration.innerText = "00:00";
+            liveStats = { tripId: null, maxSpeed: 0, brakingCount: 0, startTime: null, isBrakingEvent: false };
+        }
+
+        // --- POMOCNÁ FUNKCE PRO VÝPOČET STATISTIK Z HISTORIE ---
+        function renderHistoryStats(historyData) {
+            if (!historyData || historyData.length === 0) return;
+
+            let maxS = 0;
+            let brakes = 0;
+            let isBraking = false;
+
+            for (let i = 0; i < historyData.length; i++) {
+                const s = historyData[i].currentSpeed ?? historyData[i].CurrentSpeed;
+                if (s > maxS) maxS = s;
+
+                if (i > 0) {
+                    const prev = historyData[i - 1].currentSpeed ?? historyData[i - 1].CurrentSpeed;
+                    if (prev - s > 8 && s > 5) {
+                        if (!isBraking) { brakes++; isBraking = true; }
+                    } else { isBraking = false; }
+                }
+            }
+
+            const last = historyData[historyData.length - 1];
+            const first = historyData[0];
+            const dist = last.distance ?? last.Distance;
+            const avgC = last.averageConsumption ?? last.AverageConsumption;
+
+            // Výpočet ceny jízdy v historii
+            const fuelConsumed = (dist / 100) * avgC;
+            const tripCost = fuelConsumed * FUEL_PRICE;
+
+            const ms = new Date(last.timestamp ?? last.Timestamp) - new Date(first.timestamp ?? first.Timestamp);
+            const totalSecs = Math.floor(ms / 1000);
+            const duration = `${Math.floor(totalSecs / 60).toString().padStart(2, '0')}:${(totalSecs % 60).toString().padStart(2, '0')}`;
+
+            ui.statMaxSpeed.innerText = Math.round(maxS);
+            ui.statBraking.innerText = brakes;
+            ui.statTripCost.innerText = tripCost.toFixed(1);
+            ui.statDuration.innerText = duration;
         }
 
         async function updateUI(data) {
@@ -626,6 +764,7 @@
             const estimatedRange = Number(data.estimatedRange ?? data.EstimatedRange) || 0;
             const avgCons = Number(data.averageConsumption ?? data.AverageConsumption) || 0;
             const curCons = Number(data.currentConsumption ?? data.CurrentConsumption) || 0;
+            const serverTripId = data.tripId ?? data.TripId;
 
             ui.valSpeed.innerText = currentSpeed;
             ui.valTarget.innerText = targetSpeed;
@@ -645,12 +784,34 @@
                 ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = targetSpeed;
             }
 
-            // Heavy Braking logic
-            const speedDrop = lastSpeed - currentSpeed;
-            if (speedDrop > 8 && currentSpeed > 5) {
-                ui.brakingBanner.style.display = 'block';
-            } else {
-                ui.brakingBanner.style.display = 'none';
+            // --- LIVE STATISTIKY (VČETNĚ CENY) ---
+            if (!isViewingHistory && distance > 0 && distance < dynamicTargetDist) {
+                if (liveStats.tripId !== serverTripId) {
+                    liveStats = { tripId: serverTripId, maxSpeed: 0, brakingCount: 0, startTime: new Date(data.timestamp ?? data.Timestamp), isBrakingEvent: false };
+                }
+
+                if (currentSpeed > liveStats.maxSpeed) liveStats.maxSpeed = currentSpeed;
+
+                const speedDrop = lastSpeed - currentSpeed;
+                if (speedDrop > 8 && currentSpeed > 5) {
+                    ui.brakingBanner.style.display = 'block';
+                    if (!liveStats.isBrakingEvent) { liveStats.brakingCount++; liveStats.isBrakingEvent = true; }
+                } else {
+                    ui.brakingBanner.style.display = 'none';
+                    liveStats.isBrakingEvent = false;
+                }
+
+                const ms = new Date(data.timestamp ?? data.Timestamp) - liveStats.startTime;
+                const totalSecs = Math.floor(ms / 1000);
+                const durationStr = `${Math.floor(totalSecs / 60).toString().padStart(2, '0')}:${(totalSecs % 60).toString().padStart(2, '0')}`;
+
+                const fuelConsumed = (distance / 100) * avgCons;
+                const tripCost = fuelConsumed * FUEL_PRICE;
+
+                ui.statMaxSpeed.innerText = liveStats.maxSpeed;
+                ui.statBraking.innerText = liveStats.brakingCount;
+                ui.statTripCost.innerText = tripCost.toFixed(1);
+                ui.statDuration.innerText = durationStr;
             }
             lastSpeed = currentSpeed;
 
@@ -685,7 +846,7 @@
             updateIndicatorHigh(ui.indCoolant, coolant, 110.0, 120.0);
 
             // Čas
-            document.getElementById('timeText').innerText = "Čas záznamu: " + new Date(data.timestamp ?? data.Timestamp).toLocaleTimeString();
+            document.getElementById('timeText').innerText = "Čas záznamu: " + new Date(data.timestamp ?? data.Timestamp).toLocaleTimeString('cs-CZ');
 
             // Bannery
             ui.waitingBanner.style.display = 'none';
@@ -731,7 +892,7 @@
                     list.innerHTML = trips.map(t => `
                             <div class="trip-item" onclick="viewTrip('${t.tripId}')">
                                 <b style="color:#00ffcc;">Jízda: ${t.tripId.split('-')[1] || t.tripId}</b>
-                                <small style="color:#aaa;">${t.carType} • ${new Date(t.start).toLocaleTimeString()}</small><br>
+                                <small style="color:#aaa;">${t.carType} • ${new Date(t.start).toLocaleTimeString('cs-CZ')}</small><br>
                                 <span style="font-size:12px;">Ujeto: ${t.distance.toFixed(1)} km</span>
                                 <button class="btn-delete" onclick="deleteTrip('${t.tripId}', event)" title="Smazat jízdu">🗑️</button>
                             </div>
@@ -750,7 +911,7 @@
             const data = await res.json();
 
             if (data.length > 0) {
-                const labels = data.map(d => new Date(d.timestamp ?? d.Timestamp).toLocaleTimeString());
+                const labels = data.map(d => new Date(d.timestamp ?? d.Timestamp).toLocaleTimeString('cs-CZ'));
                 speedChart.data.labels = labels;
                 speedChart.data.datasets[0].data = data.map(d => d.currentSpeed ?? d.CurrentSpeed);
                 consChart.data.labels = labels;
@@ -759,6 +920,7 @@
                 speedChart.update();
                 consChart.update();
                 updateUI(data[data.length - 1]);
+                renderHistoryStats(data);
             }
         }
 
@@ -802,8 +964,8 @@
                     if (distance < dynamicTargetDist && distance > 0) {
                         const historyRes = await fetch('/api/telemetry/history');
                         const history = await historyRes.json();
-                        const labels = history.map(h => new Date(h.timestamp ?? h.Timestamp).toLocaleTimeString());
 
+                        const labels = history.map(h => new Date(h.timestamp ?? h.Timestamp).toLocaleTimeString('cs-CZ'));
                         speedChart.data.labels = labels;
                         speedChart.data.datasets[0].data = history.map(h => h.currentSpeed ?? h.CurrentSpeed);
                         consChart.data.labels = labels;
