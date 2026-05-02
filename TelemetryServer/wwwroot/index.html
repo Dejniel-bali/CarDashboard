@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Car Dashboard V12 - Teplota a detaily</title>
+    <title>Car Dashboard - Telemetry Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -73,6 +73,16 @@
             display: none;
         }
 
+        /* Nový banner pro čekání na start */
+        #waitingBanner {
+            display: block;
+            background-color: #1e1e1e;
+            color: #00ffcc;
+            border: 2px dashed #00ffcc;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+            animation: pulse 2s infinite;
+        }
+
         #brakingBanner {
             background-color: #ff0000;
             box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
@@ -121,6 +131,20 @@
             to {
                 opacity: 0.6;
                 transform: scale(0.98);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
             }
         }
 
@@ -236,6 +260,7 @@
     </style>
 </head>
 <body id="mainBody">
+
     <div class="header"><h1>🏎️ Živá Telemetrie Vozidla</h1></div>
 
     <div class="warning-lights-container">
@@ -246,6 +271,8 @@
         <div id="indWasher" class="indicator">💦 OSTŘIKOVAČE</div>
     </div>
 
+    <!-- Bannery -->
+    <div id="waitingBanner" class="status-banner">⏳ ČEKÁM NA ODESLÁNÍ PŘÍKAZU START Z DISPEČINKU... ⏳</div>
     <div id="defectBanner" class="status-banner">💥 DEFEKT VOZIDLA - ČEKÁNÍ NA OPRAVU 💥</div>
     <div id="pitstopBanner" class="status-banner">🔧 SERVISNÍ ZASTÁVKA / CHLAZENÍ MOTORU... 🔧</div>
     <div id="emergencyBanner" class="status-banner">⚠️ NOUZOVÝ SJEZD Z DÁLNICE ⚠️</div>
@@ -288,18 +315,53 @@
         <div class="card" style="border-color: #9933ff;">
             <h3 style="color:#aaa; font-size:14px; margin-top:0;">UJETO</h3>
             <div class="value" id="valDistance">0</div>
-            <div style="color:#888;">km</div>
+            <div style="color:#888;">Cíl: <span id="valTargetDistText">--</span> km</div>
         </div>
     </div>
 
     <div class="route-container">
-        <h3 style="margin-top:0; color: #aaa; font-size:14px;">TRASA (CÍL: 50 KM)</h3>
+        <h3 style="margin-top:0; color: #aaa; font-size:14px;">TRASA (CÍL: <span id="routeTargetText">--</span> KM)</h3>
         <div class="progress-bar-bg"><div class="progress-bar-fill" id="routeFill"></div><div class="car-icon" id="routeCar">🚗</div></div>
     </div>
 
     <div class="chart-container"><canvas id="telemetryChart" height="80"></canvas></div>
 
     <script>
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'a' || event.key === 'A') {
+                window.open('/admin.html', '_blank');
+            }
+        });
+
+        // Nakešování UI elementů
+        const ui = {
+            mainBody: document.getElementById('mainBody'),
+            valSpeed: document.getElementById('valSpeed'),
+            valTarget: document.getElementById('valTarget'),
+            valAvgCons: document.getElementById('valAvgCons'),
+            valCurCons: document.getElementById('valCurCons'),
+            valDistance: document.getElementById('valDistance'),
+            valRange: document.getElementById('valRange'),
+            routeTargetText: document.getElementById('routeTargetText'),
+            valTargetDistText: document.getElementById('valTargetDistText'),
+            valFuelText: document.getElementById('valFuelText'),
+            cardFuel: document.getElementById('cardFuel'),
+            signGraphic: document.getElementById('signGraphic'),
+            indLights: document.getElementById('indLights'),
+            indOil: document.getElementById('indOil'),
+            indCoolant: document.getElementById('indCoolant'),
+            indTire: document.getElementById('indTire'),
+            indWasher: document.getElementById('indWasher'),
+            waitingBanner: document.getElementById('waitingBanner'),
+            defectBanner: document.getElementById('defectBanner'),
+            pitstopBanner: document.getElementById('pitstopBanner'),
+            emergencyBanner: document.getElementById('emergencyBanner'),
+            brakingBanner: document.getElementById('brakingBanner'),
+            highwayBanner: document.getElementById('highwayBanner'),
+            routeFill: document.getElementById('routeFill'),
+            routeCar: document.getElementById('routeCar')
+        };
+
         const ctx = document.getElementById('telemetryChart').getContext('2d');
         const telemetryChart = new Chart(ctx, {
             type: 'line',
@@ -314,118 +376,190 @@
             options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: -90, cutout: '75%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { duration: 500 } }
         });
 
-        // Pomocná funkce (nižší je horší)
         function updateIndicatorLow(element, value, warningLimit, dangerLimit) {
+            if (!element) return;
             element.classList.remove('warning', 'danger');
             if (value < dangerLimit) element.classList.add('danger');
             else if (value < warningLimit) element.classList.add('warning');
         }
 
-        // Pomocná funkce pro teplotu (vyšší je horší)
         function updateIndicatorHigh(element, value, warningLimit, dangerLimit) {
+            if (!element) return;
             element.classList.remove('warning', 'danger');
             if (value >= dangerLimit) element.classList.add('danger');
             else if (value >= warningLimit) element.classList.add('warning');
         }
 
+        // --- FUNKCE PRO KOMPLETNÍ VYNULOVÁNÍ PALUBNÍ DESKY ---
+        function resetDashboard() {
+            if (ui.valSpeed) ui.valSpeed.innerText = "0";
+            if (ui.valTarget) ui.valTarget.innerText = "0";
+            if (ui.valAvgCons) ui.valAvgCons.innerText = "0.0";
+            if (ui.valCurCons) ui.valCurCons.innerText = "0.0";
+            if (ui.valDistance) ui.valDistance.innerText = "0.00";
+            if (ui.valRange) ui.valRange.innerText = "---";
+            if (ui.valFuelText) ui.valFuelText.innerText = "0.0 L";
+            if (ui.routeTargetText) ui.routeTargetText.innerText = "--";
+            if (ui.valTargetDistText) ui.valTargetDistText.innerText = "--";
+
+            fuelGauge.data.datasets[0].data = [0, 50];
+            fuelGauge.update();
+            if (ui.cardFuel) ui.cardFuel.style.borderColor = '#00ffcc';
+
+            if (ui.signGraphic) { ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = '--'; }
+
+            if (ui.indLights) ui.indLights.classList.remove('lights-on');
+            updateIndicatorLow(ui.indOil, 100, 20.0, 5.0);
+            updateIndicatorLow(ui.indTire, 2.5, 2.0, 1.8);
+            updateIndicatorLow(ui.indWasher, 100, 20.0, 5.0);
+            if (ui.indCoolant) { ui.indCoolant.innerText = '🌡️ -- °C'; ui.indCoolant.classList.remove('warning', 'danger'); }
+
+            if (ui.defectBanner) ui.defectBanner.style.display = 'none';
+            if (ui.pitstopBanner) ui.pitstopBanner.style.display = 'none';
+            if (ui.emergencyBanner) ui.emergencyBanner.style.display = 'none';
+            if (ui.brakingBanner) ui.brakingBanner.style.display = 'none';
+            if (ui.highwayBanner) ui.highwayBanner.style.display = 'none';
+
+            if (ui.waitingBanner) ui.waitingBanner.style.display = 'block';
+
+            if (ui.routeFill) ui.routeFill.style.width = '0%';
+            if (ui.routeCar) ui.routeCar.style.left = '-20px';
+
+            telemetryChart.data.labels = [];
+            telemetryChart.data.datasets[0].data = [];
+            telemetryChart.data.datasets[1].data = [];
+            telemetryChart.update();
+        }
+
+        let fetchInterval;
+        let targetReachedAlertShown = false;
+
         async function fetchData() {
             try {
                 const response = await fetch('/api/telemetry/latest');
+
                 if (response.ok) {
                     const data = await response.json();
 
-                    if (data.distance >= 50) {
-                        document.getElementById('mainBody').innerHTML = `
-                                <div style="text-align:center; margin-top:150px;">
-                                    <h1 style="font-size:80px; color:#00ffcc; margin:0;">🏁 CÍL 🏁</h1>
-                                    <p style="font-size:30px;">Auto úspěšně dojelo do cíle (50 km).</p>
-                                    <button onclick="location.reload()" style="padding:15px 30px; font-size:20px; cursor:pointer; background:#1e1e1e; color:white; border:2px solid #00ffcc; border-radius:8px;">Zavřít a obnovit</button>
-                                </div>`;
-                        return;
+                    const rawTargetDist = data.targetDistance ?? data.TargetDistance ?? 50;
+                    const dynamicTargetDist = rawTargetDist > 0 ? rawTargetDist : 50;
+                    const rawMaxFuel = data.maxFuelCapacity ?? data.MaxFuelCapacity ?? 50;
+                    const maxFuel = rawMaxFuel > 0 ? rawMaxFuel : 50;
+                    const currentSpeed = Math.round(data.currentSpeed ?? data.CurrentSpeed ?? 0);
+                    const targetSpeed = Math.round(data.targetSpeed ?? data.TargetSpeed ?? 0);
+                    const fuel = data.fuelRemaining ?? data.FuelRemaining ?? 0;
+                    const distance = data.distance ?? data.Distance ?? 0;
+                    const estimatedRange = data.estimatedRange ?? data.EstimatedRange ?? 0;
+                    const avgCons = data.averageConsumption ?? data.AverageConsumption ?? 0;
+                    const curCons = data.currentConsumption ?? data.CurrentConsumption ?? 0;
+
+                    // --- LOGIKA PO DOJETÍ DO CÍLE ---
+                    if (distance >= dynamicTargetDist && dynamicTargetDist > 0) {
+                        if (!targetReachedAlertShown) {
+                            targetReachedAlertShown = true;
+
+                            // Vykreslí auto úplně v cíli, než vyskočí okno
+                            if (ui.routeFill) ui.routeFill.style.width = '100%';
+                            if (ui.routeCar) ui.routeCar.style.left = 'calc(100% - 20px)';
+                            if (ui.valDistance) ui.valDistance.innerText = dynamicTargetDist.toFixed(2);
+                            if (ui.valSpeed) ui.valSpeed.innerText = "0";
+
+                            setTimeout(() => {
+                                alert("🏁 Dojeli jste do cíle!");
+                                resetDashboard(); // Po odkliknutí se vše vynuluje
+                            }, 100);
+                        } else {
+                            // Už bylo odkliknuto, jen udržujeme vyresetovaný stav
+                            resetDashboard();
+                        }
+                        return; // Blokuje překreslování grafů po dojetí do cíle
+                    } else {
+                        targetReachedAlertShown = false;
+                        if (ui.waitingBanner) ui.waitingBanner.style.display = 'none';
                     }
 
-                    const currentSpeed = Math.round(data.currentSpeed);
-                    const targetSpeed = Math.round(data.targetSpeed);
+                    // --- BĚŽNÉ VYKRESLOVÁNÍ BĚHEM JÍZDY ---
+                    if (ui.valSpeed) ui.valSpeed.innerText = currentSpeed;
+                    if (ui.valTarget) ui.valTarget.innerText = targetSpeed;
+                    if (ui.valAvgCons) ui.valAvgCons.innerText = avgCons.toFixed(1);
+                    if (ui.valCurCons) ui.valCurCons.innerText = curCons.toFixed(1);
+                    if (ui.valDistance) ui.valDistance.innerText = distance.toFixed(2);
+                    if (ui.valRange) ui.valRange.innerText = estimatedRange > 0 ? Math.round(estimatedRange) : "---";
 
-                    document.getElementById('valSpeed').innerText = currentSpeed;
-                    document.getElementById('valTarget').innerText = targetSpeed;
-                    document.getElementById('valAvgCons').innerText = data.averageConsumption.toFixed(1);
-                    document.getElementById('valCurCons').innerText = data.currentConsumption.toFixed(1);
-                    document.getElementById('valDistance').innerText = data.distance.toFixed(2);
-                    document.getElementById('valRange').innerText = data.estimatedRange > 0 ? Math.round(data.estimatedRange) : "---";
+                    if (ui.routeTargetText) ui.routeTargetText.innerText = dynamicTargetDist;
+                    if (ui.valTargetDistText) ui.valTargetDistText.innerText = dynamicTargetDist;
 
-                    const fuel = data.fuelRemaining;
-                    document.getElementById('valFuelText').innerText = fuel.toFixed(1) + ' L';
+                    if (ui.valFuelText) ui.valFuelText.innerText = fuel.toFixed(1) + ' L';
 
                     let fuelColor = '#00ffcc';
-                    if (fuel < 2.0) fuelColor = '#ff0000';
-                    else if (fuel < 10.0) fuelColor = '#ff9900';
+                    if (fuel < (maxFuel * 0.1)) fuelColor = '#ff0000';
+                    else if (fuel < (maxFuel * 0.25)) fuelColor = '#ff9900';
 
-                    fuelGauge.data.datasets[0].data = [fuel, 50 - fuel];
+                    fuelGauge.data.datasets[0].data = [fuel, Math.max(0, maxFuel - fuel)];
                     fuelGauge.data.datasets[0].backgroundColor = [fuelColor, '#333'];
                     fuelGauge.update();
-                    document.getElementById('cardFuel').style.borderColor = fuelColor;
+                    if (ui.cardFuel) ui.cardFuel.style.borderColor = fuelColor;
 
-                    const signGraphic = document.getElementById('signGraphic');
-                    if (targetSpeed === 0) { signGraphic.className = 'stop-sign'; signGraphic.innerText = 'STOP'; }
-                    else { signGraphic.className = 'speed-limit-sign'; signGraphic.innerText = targetSpeed; }
+                    if (ui.signGraphic) {
+                        if (targetSpeed === 0) { ui.signGraphic.className = 'stop-sign'; ui.signGraphic.innerText = 'STOP'; }
+                        else { ui.signGraphic.className = 'speed-limit-sign'; ui.signGraphic.innerText = targetSpeed; }
+                    }
 
-                    const indLights = document.getElementById('indLights');
-                    if (data.lightsOn) indLights.classList.add('lights-on');
-                    else indLights.classList.remove('lights-on');
+                    const lightsOn = data.lightsOn ?? data.LightsOn ?? false;
+                    if (ui.indLights) {
+                        if (lightsOn) ui.indLights.classList.add('lights-on');
+                        else ui.indLights.classList.remove('lights-on');
+                    }
 
-                    const indOil = document.getElementById('indOil');
-                    const indCoolant = document.getElementById('indCoolant');
-                    const indTire = document.getElementById('indTire');
-                    const indWasher = document.getElementById('indWasher');
+                    updateIndicatorLow(ui.indOil, data.oilLevel ?? data.OilLevel ?? 100, 20.0, 5.0);
+                    updateIndicatorLow(ui.indTire, data.tirePressure ?? data.TirePressure ?? 2.5, 2.0, 1.8);
+                    updateIndicatorLow(ui.indWasher, data.washerFluidLevel ?? data.WasherFluidLevel ?? 100, 20.0, 5.0);
 
-                    // Výpis a logika barev
-                    updateIndicatorLow(indOil, data.oilLevel, 20.0, 5.0);
-                    updateIndicatorLow(indTire, data.tirePressure, 2.0, 1.8);
-                    updateIndicatorLow(indWasher, data.washerFluidLevel, 20.0, 5.0);
+                    const coolant = data.coolantTemp ?? data.CoolantTemp ?? 90;
+                    if (ui.indCoolant) ui.indCoolant.innerText = '🌡️ ' + Math.round(coolant) + ' °C';
+                    updateIndicatorHigh(ui.indCoolant, coolant, 110.0, 120.0);
 
-                    // TEPLOTA - Zobrazí číslo a vyhodnotí horní limity
-                    indCoolant.innerText = '🌡️ ' + Math.round(data.coolantTemp) + ' °C';
-                    updateIndicatorHigh(indCoolant, data.coolantTemp, 110.0, 120.0);
+                    if (ui.defectBanner) ui.defectBanner.style.display = 'none';
+                    if (ui.pitstopBanner) ui.pitstopBanner.style.display = 'none';
+                    if (ui.emergencyBanner) ui.emergencyBanner.style.display = 'none';
+                    if (ui.brakingBanner) ui.brakingBanner.style.display = 'none';
+                    if (ui.highwayBanner) ui.highwayBanner.style.display = 'none';
 
-                    // Bannery
-                    const defectBanner = document.getElementById('defectBanner');
-                    const pitstopBanner = document.getElementById('pitstopBanner');
-                    const emergencyBanner = document.getElementById('emergencyBanner');
-                    const brakingBanner = document.getElementById('brakingBanner');
-                    const highwayBanner = document.getElementById('highwayBanner');
+                    const isCritical = (data.oilLevel ?? data.OilLevel) < 5.0 || coolant >= 120.0 || (data.tirePressure ?? data.TirePressure) < 1.8 || fuel < 2.0;
+                    const isDefected = data.isDefected ?? data.IsDefected ?? false;
 
-                    defectBanner.style.display = 'none'; pitstopBanner.style.display = 'none';
-                    emergencyBanner.style.display = 'none'; brakingBanner.style.display = 'none';
-                    highwayBanner.style.display = 'none';
+                    if (isDefected && ui.defectBanner) ui.defectBanner.style.display = 'block';
+                    else if (targetSpeed === 0 && currentSpeed < 1 && ui.pitstopBanner) ui.pitstopBanner.style.display = 'block';
+                    else if (targetSpeed === 90 && currentSpeed > 95 && isCritical && ui.emergencyBanner) ui.emergencyBanner.style.display = 'block';
+                    else if (currentSpeed - targetSpeed >= 35 && ui.brakingBanner) ui.brakingBanner.style.display = 'block';
+                    else if (targetSpeed === 130 && ui.highwayBanner) ui.highwayBanner.style.display = 'block';
 
-                    const isCritical = data.oilLevel < 5.0 || data.coolantTemp >= 120.0 || data.tirePressure < 1.8 || data.fuelRemaining < 2.0;
-
-                    if (data.isDefected) defectBanner.style.display = 'block';
-                    else if (targetSpeed === 0) pitstopBanner.style.display = 'block';
-                    else if (targetSpeed === 90 && currentSpeed > 95 && isCritical) emergencyBanner.style.display = 'block';
-                    else if (currentSpeed - targetSpeed >= 35) brakingBanner.style.display = 'block';
-                    else if (targetSpeed === 130) highwayBanner.style.display = 'block';
-
-                    let progress = (data.distance / 50.0) * 100;
+                    let progress = (distance / dynamicTargetDist) * 100;
                     if (progress > 100) progress = 100;
-                    document.getElementById('routeFill').style.width = progress + '%';
-                    document.getElementById('routeCar').style.left = `calc(${progress}% - 20px)`;
-                }
+                    if (ui.routeFill) ui.routeFill.style.width = progress + '%';
+                    if (ui.routeCar) ui.routeCar.style.left = `calc(${progress}% - 20px)`;
 
-                const historyRes = await fetch('/api/telemetry/history');
-                if (historyRes.ok) {
-                    const history = await historyRes.json();
-                    telemetryChart.data.labels = history.map(h => new Date(h.timestamp).toLocaleTimeString());
-                    telemetryChart.data.datasets[0].data = history.map(h => h.currentSpeed);
-                    telemetryChart.data.datasets[1].data = history.map(h => h.currentConsumption);
-                    telemetryChart.update();
+                    // Kreslení grafu historie pouze během jízdy
+                    const historyRes = await fetch('/api/telemetry/history');
+                    if (historyRes.ok) {
+                        const history = await historyRes.json();
+                        telemetryChart.data.labels = history.map(h => new Date(h.timestamp ?? h.Timestamp).toLocaleTimeString());
+                        telemetryChart.data.datasets[0].data = history.map(h => h.currentSpeed ?? h.CurrentSpeed);
+                        telemetryChart.data.datasets[1].data = history.map(h => h.currentConsumption ?? h.CurrentConsumption);
+                        telemetryChart.update();
+                    }
+                } else {
+                    // Pokud server běží, ale simulace ještě vůbec nezačala (databáze je prázdná)
+                    resetDashboard();
                 }
-            } catch (e) { }
+            } catch (e) {
+                // Pokud server vůbec neběží
+                resetDashboard();
+            }
         }
 
+        // Načtení dat každou vteřinu
         setInterval(fetchData, 1000);
-        fetchData();
     </script>
 </body>
 </html>

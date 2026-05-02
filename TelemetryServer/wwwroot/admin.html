@@ -1,0 +1,231 @@
+﻿<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispečink - Řízení Simulace</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .panel {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            border: 2px solid #0f3460;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            text-align: center;
+            color: #e94560;
+            margin-top: 0;
+            font-size: 28px;
+            letter-spacing: 1px;
+        }
+
+        .section {
+            background: #0f3460;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+            .section h2 {
+                margin-top: 0;
+                font-size: 18px;
+                color: #00ffcc;
+                border-bottom: 1px solid #1a1a2e;
+                padding-bottom: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+        .badge {
+            background: #e94560;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: #1a1a2e;
+            color: white;
+            border: 1px solid #e94560;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            padding: 15px 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: 0.2s;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+            button:hover {
+                filter: brightness(1.2);
+                transform: translateY(-2px);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
+        .btn-start {
+            background: #00cc66;
+            width: 100%;
+            font-size: 18px;
+            padding: 15px;
+        }
+
+        .btn-pause {
+            background: #ff9900;
+        }
+
+        .btn-stop {
+            background: #cc0000;
+        }
+
+        .btn-time {
+            background: #0099cc;
+        }
+
+        .btn-danger {
+            background: #8b0000;
+            border: 1px solid #ff0000;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 15px;
+            font-weight: bold;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h1>🛠️ OVLÁDACÍ DISPEČINK</h1>
+
+        <div class="section">
+            <h2>1. Nastavení parametrů jízdy</h2>
+            <select id="carType">
+                <option value="Sedan">Běžný Sedan (Nádrž 50L)</option>
+                <option value="SUV">Velké SUV (Nádrž 80L, vysoká spotřeba)</option>
+                <option value="Sport">Sportovní vůz (Nádrž 40L, extrémní spotřeba)</option>
+            </select>
+            <input type="number" id="distTarget" value="50" min="1" max="1000" placeholder="Vzdálenost do cíle (km)">
+            <button class="btn-start" onclick="sendCommand('start')">▶️ ODSTARTOVAT SIMULACI</button>
+        </div>
+
+        <div class="section">
+            <h2>2. Řízení běhu simulace <span class="badge" id="simSpeedBadge">Rychlost: 1x</span></h2>
+            <div class="grid">
+                <button class="btn-pause" onclick="sendCommand('pause')">⏸️ Pauza / Pokračovat</button>
+                <button class="btn-stop" onclick="sendCommand('stop')">🛑 Zastavit</button>
+                <button class="btn-time" onclick="sendCommand('sim_slower')">🐢 Zpomalit čas</button>
+                <button class="btn-time" onclick="sendCommand('sim_faster')">🐇 Zrychlit čas</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>3. Generátor havárií (God Mode)</h2>
+            <div class="grid">
+                <button class="btn-danger" onclick="sendCommand('defect')">💥 Propíchnout pneumatiku</button>
+                <button class="btn-danger" onclick="sendCommand('drop_oil')">🛢️ Prorazit olejovou vanu</button>
+                <button class="btn-danger" style="grid-column: span 2;" onclick="sendCommand('drop_water')">🌡️ Uvařit motor (118 °C)</button>
+            </div>
+        </div>
+
+        <div class="status" id="statusText"></div>
+    </div>
+
+    <script>
+        // Nakešování UI elementů do paměti pro vyšší výkon
+        const ui = {
+            statusText: document.getElementById('statusText'),
+            distTarget: document.getElementById('distTarget'),
+            carType: document.getElementById('carType'),
+            simSpeedBadge: document.getElementById('simSpeedBadge')
+        };
+
+        async function sendCommand(actionName) {
+            ui.statusText.innerText = "Odesílám příkaz...";
+            ui.statusText.style.color = "#ff9900";
+
+            // Bezpečnostní pojistka pro vzdálenost (kdyby uživatel pole vymazal)
+            let distance = parseFloat(ui.distTarget.value);
+            if (isNaN(distance) || distance <= 0) {
+                distance = 50.0; // Výchozí bezpečná hodnota
+                ui.distTarget.value = 50;
+            }
+
+            try {
+                const response = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        Action: actionName,
+                        TargetDistance: distance,
+                        CarType: ui.carType.value
+                    })
+                });
+
+                if (response.ok) {
+                    ui.statusText.innerText = "✓ Příkaz úspěšně přijat!";
+                    ui.statusText.style.color = "#00cc66";
+                } else {
+                    ui.statusText.innerText = "✕ Chyba serveru!";
+                    ui.statusText.style.color = "#cc0000";
+                }
+            } catch (e) {
+                ui.statusText.innerText = "✕ Nelze se spojit se serverem!";
+                ui.statusText.style.color = "#cc0000";
+            }
+
+            setTimeout(() => ui.statusText.innerText = "", 3000);
+        }
+
+        // Tento skript si co vteřinu stáhne data z auta a zkontroluje, jaká je aktuální rychlost času
+        async function checkSimSpeed() {
+            try {
+                const response = await fetch('/api/telemetry/latest');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Blbuvzdorné čtení (velká/malá písmena) + pojistka na 1x
+                    const currentSpeedMult = data.simSpeedMultiplier ?? data.SimSpeedMultiplier ?? 1;
+                    ui.simSpeedBadge.innerText = `Rychlost: ${currentSpeedMult}x`;
+                }
+            } catch (e) { }
+        }
+        setInterval(checkSimSpeed, 1000);
+    </script>
+</body>
+</html>

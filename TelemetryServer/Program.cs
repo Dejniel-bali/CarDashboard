@@ -1,63 +1,77 @@
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<AppDbContext>();
+// Nastavení databáze
+builder.Services.AddDbContext<TelemetryDb>(options =>
+    options.UseSqlite("Data Source=telemetry.db"));
+
+builder.Services.AddCors();
 
 var app = builder.Build();
 
-// 1. TOTO JE NOVÉ: Povolíme serveru zobrazovat webové stránky (HTML, CSS, JS)
+app.UseCors(b => b.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+
+// TYTO DVA ŘÁDKY JSOU NUTNÉ PRO ZOBRAZENÍ WEBU (index.html, admin.html)
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// Vytvoření databáze při startu
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<TelemetryDb>();
     db.Database.EnsureCreated();
 }
 
-// Původní endpoint pro ZÁPIS dat ze simulátoru
-app.MapPost("/api/telemetry", async (TelemetryData data, AppDbContext db) =>
+// --- PŘIJÍMAČ PŘÍKAZŮ Z ADMIN WEBU ---
+app.MapPost("/api/command", (SimCommand cmd) =>
 {
-    Console.ForegroundColor = ConsoleColor.Green;
-    Console.WriteLine($"[SERVER PŘIJAL {data.Timestamp:HH:mm:ss}] - Ukládám do DB...");
-    Console.ResetColor();
+    CommandStore.CurrentCommand = cmd;
+    return Results.Ok();
+});
 
-    db.TelemetryRecords.Add(data);
+app.MapGet("/api/command", () =>
+{
+    var cmd = CommandStore.CurrentCommand;
+    CommandStore.CurrentCommand = new SimCommand(); // Vymaže paměť po přečtení autem
+    return Results.Ok(cmd);
+});
+
+// --- PŘÍJEM A ODESÍLÁNÍ TELEMETRIE ---
+app.MapPost("/api/telemetry", async (TelemetryData data, TelemetryDb db) =>
+{
+    db.Telemetry.Add(data);
     await db.SaveChangesAsync();
     return Results.Ok();
 });
 
-// 2. NOVÝ ENDPOINT: Vrátí úplně ten nejnovější záznam (pro budíky)
-app.MapGet("/api/telemetry/latest", (AppDbContext db) =>
+app.MapGet("/api/telemetry/latest", async (TelemetryDb db) =>
 {
-    var latest = db.TelemetryRecords.OrderByDescending(t => t.Id).FirstOrDefault();
-    return latest is not null ? Results.Ok(latest) : Results.NotFound();
+    var latest = await db.Telemetry.OrderByDescending(t => t.Timestamp).FirstOrDefaultAsync();
+    return latest != null ? Results.Ok(latest) : Results.NotFound();
 });
 
-// 3. NOVÝ ENDPOINT: Vrátí posledních 30 záznamů (pro vykreslení grafu)
-app.MapGet("/api/telemetry/history", (AppDbContext db) =>
+app.MapGet("/api/telemetry/history", async (TelemetryDb db) =>
 {
-    var history = db.TelemetryRecords.OrderByDescending(t => t.Id).Take(30).ToList();
-    history.Reverse(); // Chceme je od nejstaršího po nejnovější zleva doprava
+    var history = await db.Telemetry.OrderByDescending(t => t.Timestamp).Take(50).ToListAsync();
+    history.Reverse(); // Otočení pro správné vykreslení zleva doprava v grafu
     return Results.Ok(history);
 });
 
 app.Run();
 
-// Modely zůstávají stejné...
-public class AppDbContext : DbContext
+// ==========================================
+// --- DATOVÉ MODELY ---
+// ==========================================
+
+public class TelemetryDb : DbContext
 {
-    public DbSet<TelemetryData> TelemetryRecords { get; set; }
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        optionsBuilder.UseSqlite("Data Source=telemetry.db");
-    }
+    public TelemetryDb(DbContextOptions<TelemetryDb> options) : base(options) { }
+    public DbSet<TelemetryData> Telemetry => Set<TelemetryData>();
 }
 
 public class TelemetryData
@@ -69,12 +83,27 @@ public class TelemetryData
     public double Distance { get; set; }
     public double FuelRemaining { get; set; }
     public double AverageConsumption { get; set; }
+    public double CurrentConsumption { get; set; }
     public double OilLevel { get; set; }
     public double CoolantTemp { get; set; }
     public double TirePressure { get; set; }
     public double EstimatedRange { get; set; }
-    public double CurrentConsumption { get; set; }
-    public bool LightsOn { get; set; }         // NOVÉ
-    public double WasherFluidLevel { get; set; } // NOVÉ
+    public bool LightsOn { get; set; }
+    public double WasherFluidLevel { get; set; }
     public bool IsDefected { get; set; }
+    public double MaxFuelCapacity { get; set; }
+    public double TargetDistance { get; set; }
+    public int SimSpeedMultiplier { get; set; }
+}
+
+public class SimCommand
+{
+    public string Action { get; set; } = "";
+    public double TargetDistance { get; set; } = 50.0;
+    public string CarType { get; set; } = "Sedan";
+}
+
+public static class CommandStore
+{
+    public static SimCommand CurrentCommand { get; set; } = new SimCommand();
 }
