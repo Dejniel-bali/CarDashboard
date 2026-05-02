@@ -157,10 +157,19 @@
 
         <div class="section">
             <h2>3. Generátor havárií (God Mode)</h2>
+            <!-- NOVÝ VÝBĚR KONKRÉTNÍ PNEUMATIKY -->
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <select id="defectTire" style="margin-bottom: 0; flex: 1;">
+                    <option value="defect_fl">Levá přední</option>
+                    <option value="defect_fr">Pravá přední</option>
+                    <option value="defect_rl">Levá zadní</option>
+                    <option value="defect_rr">Pravá zadní</option>
+                </select>
+                <button class="btn-danger" style="flex: 1;" onclick="sendCommand(document.getElementById('defectTire').value)">💥 Propíchnout vybranou</button>
+            </div>
             <div class="grid">
-                <button class="btn-danger" onclick="sendCommand('defect')">💥 Propíchnout pneumatiku</button>
                 <button class="btn-danger" onclick="sendCommand('drop_oil')">🛢️ Prorazit olejovou vanu</button>
-                <button class="btn-danger" style="grid-column: span 2;" onclick="sendCommand('drop_water')">🌡️ Uvařit motor (118 °C)</button>
+                <button class="btn-danger" onclick="sendCommand('drop_water')">🌡️ Uvařit motor (118 °C)</button>
             </div>
         </div>
 
@@ -168,7 +177,6 @@
     </div>
 
     <script>
-        // Nakešování UI elementů do paměti pro vyšší výkon
         const ui = {
             statusText: document.getElementById('statusText'),
             distTarget: document.getElementById('distTarget'),
@@ -180,10 +188,9 @@
             ui.statusText.innerText = "Odesílám příkaz...";
             ui.statusText.style.color = "#ff9900";
 
-            // Bezpečnostní pojistka pro vzdálenost (kdyby uživatel pole vymazal)
             let distance = parseFloat(ui.distTarget.value);
             if (isNaN(distance) || distance <= 0) {
-                distance = 50.0; // Výchozí bezpečná hodnota
+                distance = 50.0;
                 ui.distTarget.value = 50;
             }
 
@@ -191,11 +198,7 @@
                 const response = await fetch('/api/command', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        Action: actionName,
-                        TargetDistance: distance,
-                        CarType: ui.carType.value
-                    })
+                    body: JSON.stringify({ Action: actionName, TargetDistance: distance, CarType: ui.carType.value })
                 });
 
                 if (response.ok) {
@@ -209,17 +212,14 @@
                 ui.statusText.innerText = "✕ Nelze se spojit se serverem!";
                 ui.statusText.style.color = "#cc0000";
             }
-
             setTimeout(() => ui.statusText.innerText = "", 3000);
         }
 
-        // Tento skript si co vteřinu stáhne data z auta a zkontroluje, jaká je aktuální rychlost času
         async function checkSimSpeed() {
             try {
                 const response = await fetch('/api/telemetry/latest');
                 if (response.ok) {
                     const data = await response.json();
-                    // Blbuvzdorné čtení (velká/malá písmena) + pojistka na 1x
                     const currentSpeedMult = data.simSpeedMultiplier ?? data.SimSpeedMultiplier ?? 1;
                     ui.simSpeedBadge.innerText = `Rychlost: ${currentSpeedMult}x`;
                 }
